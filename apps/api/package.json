@@ -1,0 +1,50 @@
+{
+  "name": "@somewhere/api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "nest build",
+    "dev": "nest start --watch",
+    "start": "node dist/main.js",
+    "worker": "node dist/worker/main.js",
+    "delivery:run-once": "node dist/tools/run-delivery-once.js",
+    "typecheck": "tsc -p tsconfig.typecheck.json --noEmit",
+    "test:unit": "vitest run --config vitest.unit.config.ts",
+    "test:integration": "node scripts/prepare-test-db.mjs && vitest run --config vitest.integration.config.ts",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:test:prepare": "node scripts/prepare-test-db.mjs",
+    "db:seed": "tsx prisma/seed.ts",
+    "prisma:generate": "prisma generate",
+    "openapi:export": "nest build && node dist/tools/export-openapi.js"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.6",
+    "@nestjs/core": "^11.1.6",
+    "@nestjs/platform-express": "^11.1.6",
+    "@nestjs/swagger": "^11.2.0",
+    "@prisma/client": "^6.16.2",
+    "argon2": "^0.44.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.2",
+    "cookie-parser": "^1.4.7",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "dotenv": "^17.2.3"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.10",
+    "@nestjs/testing": "^11.1.6",
+    "@types/cookie-parser": "^1.4.9",
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.18.9",
+    "@types/supertest": "^6.0.3",
+    "prisma": "^6.16.2",
+    "supertest": "^7.1.4",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4",
+    "unplugin-swc": "^2.0.0",
+    "@swc/core": "^1.16.20"
+  }
+}

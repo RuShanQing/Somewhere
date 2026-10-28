@@ -1,0 +1,133 @@
+// Somewhere 数据模型
+// TASK-001：用户与会话；TASK-003：城市目录与最小个人资料；TASK-004：明信片与草稿。
+// 其他业务表必须在对应任务中通过显式迁移新增。
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ReceptionMode {
+  OPEN
+  RESTING
+  CLOSED
+}
+
+enum PostcardStatus {
+  IN_TRANSIT
+  DELIVERED
+  RESTRICTED
+}
+
+model User {
+  id                String          @id @default(uuid()) @db.Uuid
+  emailNormalized   String          @unique @map("email_normalized") @db.VarChar(254)
+  passwordHash      String          @map("password_hash") @db.VarChar(255)
+  nickname          String          @db.VarChar(32)
+  adultConfirmedAt  DateTime        @map("adult_confirmed_at") @db.Timestamptz(3)
+  emailVerifiedAt   DateTime?       @map("email_verified_at") @db.Timestamptz(3)
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  sessions          Session[]
+  profile           Profile?
+  sentPostcards     Postcard[]      @relation("PostcardSender")
+  receivedPostcards Postcard[]      @relation("PostcardReceiver")
+  draftOwner        PostcardDraft[] @relation("DraftOwner")
+  draftRecipient    PostcardDraft[] @relation("DraftRecipient")
+
+  @@map("users")
+}
+
+model Session {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  sessionHash String    @unique @map("session_hash") @db.Char(64)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(3)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model City {
+  id                   String     @id @default(uuid()) @db.Uuid
+  name                 String     @db.VarChar(80)
+  countryCode          String     @map("country_code") @db.Char(2)
+  centroidLat          Float      @map("centroid_lat")
+  centroidLon          Float      @map("centroid_lon")
+  createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  profiles             Profile[]
+  postcardsOrigin      Postcard[] @relation("PostcardOrigin")
+  postcardsDestination Postcard[] @relation("PostcardDestination")
+
+  @@unique([name, countryCode])
+  @@index([countryCode])
+  @@map("cities")
+}
+
+model Profile {
+  userId        String        @id @map("user_id") @db.Uuid
+  cityId        String?       @map("city_id") @db.Uuid
+  receptionMode ReceptionMode @default(OPEN) @map("reception_mode")
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  city          City?         @relation(fields: [cityId], references: [id], onDelete: SetNull)
+
+  @@index([cityId])
+  @@map("profiles")
+}
+
+model PostcardDraft {
+  id             String   @id @default(uuid()) @db.Uuid
+  ownerId        String   @map("owner_id") @db.Uuid
+  recipientId    String?  @map("recipient_id") @db.Uuid
+  body           String   @db.VarChar(2000)
+  sentPostcardId String?  @unique @map("sent_postcard_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  owner        User      @relation("DraftOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  recipient    User?     @relation("DraftRecipient", fields: [recipientId], references: [id], onDelete: SetNull)
+  sentPostcard Postcard? @relation("DraftSentPostcard", fields: [sentPostcardId], references: [id], onDelete: Restrict)
+
+  @@index([ownerId, updatedAt])
+  @@index([recipientId])
+  @@map("postcard_drafts")
+}
+
+model Postcard {
+  id                String         @id @default(uuid()) @db.Uuid
+  senderId          String         @map("sender_id") @db.Uuid
+  receiverId        String         @map("receiver_id") @db.Uuid
+  body              String         @db.VarChar(2000)
+  status            PostcardStatus @default(IN_TRANSIT)
+  originCityId      String         @map("origin_city_id") @db.Uuid
+  destinationCityId String         @map("destination_city_id") @db.Uuid
+  sentAt            DateTime       @map("sent_at") @db.Timestamptz(3)
+  deliverAt         DateTime       @map("deliver_at") @db.Timestamptz(3)
+  deliveredAt       DateTime?      @map("delivered_at") @db.Timestamptz(3)
+  idempotencyKey    String?        @map("idempotency_key") @db.VarChar(80)
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  sender          User           @relation("PostcardSender", fields: [senderId], references: [id], onDelete: Restrict)
+  receiver        User           @relation("PostcardReceiver", fields: [receiverId], references: [id], onDelete: Restrict)
+  originCity      City           @relation("PostcardOrigin", fields: [originCityId], references: [id], onDelete: Restrict)
+  destinationCity City           @relation("PostcardDestination", fields: [destinationCityId], references: [id], onDelete: Restrict)
+  sourceDraft     PostcardDraft? @relation("DraftSentPostcard")
+
+  @@unique([senderId, idempotencyKey])
+  @@index([receiverId, status, deliverAt])
+  @@index([status, deliverAt])
+  @@index([senderId, status])
+  @@map("postcards")
+}

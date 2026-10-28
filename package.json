@@ -1,0 +1,44 @@
+{
+  "name": "somewhere",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@12.15.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @somewhere/api --filter @somewhere/web dev",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "build": "pnpm --filter @somewhere/api build && pnpm --filter @somewhere/web build",
+    "test:unit": "pnpm --filter @somewhere/api test:unit && pnpm --filter @somewhere/web test:unit",
+    "test:integration": "pnpm --filter @somewhere/api test:integration",
+    "test:contract": "tsx tests/contract/check-contract.ts",
+    "test:architecture": "node tests/architecture/check-boundaries.mjs",
+    "test:e2e": "pnpm --filter @somewhere/api build && playwright test --config tests/e2e/playwright.config.ts",
+    "test:smoke": "node tests/smoke/smoke.mjs",
+    "verify": "node scripts/verify.mjs",
+    "db:setup": "bash infra/postgres/create-databases.sh",
+    "db:migrate": "pnpm --filter @somewhere/api db:migrate",
+    "db:deploy": "pnpm --filter @somewhere/api db:deploy",
+    "db:seed": "pnpm --filter @somewhere/api db:seed",
+    "db:test:prepare": "pnpm --filter @somewhere/api db:test:prepare",
+    "openapi:export": "pnpm --filter @somewhere/api openapi:export",
+    "api-client:generate": "node scripts/generate-api-client.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.56.1",
+    "@types/node": "^22.18.9",
+    "eslint": "^9.39.1",
+    "eslint-plugin-vue": "^10.5.0",
+    "globals": "^15.15.0",
+    "openapi-typescript": "^7.10.1",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.2",
+    "vue-eslint-parser": "^10.2.0",
+    "dotenv": "^17.2.3"
+  }
+}
