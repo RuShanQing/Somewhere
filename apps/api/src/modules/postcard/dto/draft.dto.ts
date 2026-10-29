@@ -10,13 +10,24 @@ export class CreatePostcardDraftDto {
   body!: string;
 
   @ApiPropertyOptional({
-    description: '收件人 ID；草稿阶段可以为空，寄出前必须填写',
+    description:
+      '收件人 ID；草稿阶段可以为空。若同时提供 passageId，则必须与共途对方一致',
     type: String,
     nullable: true,
   })
   @IsOptional()
   @IsUUID('4', { message: '收件人 ID 不合法' })
   recipientId?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      '共途 ID；提供后收件人由服务端解析为共途对方，创建后不可改绑',
+    type: String,
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUUID('4', { message: '共途 ID 不合法' })
+  passageId?: string | null;
 }
 
 export class UpdatePostcardDraftDto {

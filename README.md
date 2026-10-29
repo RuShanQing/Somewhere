@@ -2,7 +2,7 @@
 
 Somewhere 是一个 Web 优先的慢社交产品：用按距离延迟抵达的明信片、城市故事、善意接力与「共途」，和远方的人交换生活片段。
 
-当前仓库完成 **TASK-001～TASK-004**：可运行的基础工程、账号注册/登录/会话/退出（含单活动会话）、49 条城市目录、最小个人资料与 `/settings`，以及邮局三栏、明信片草稿、按城市距离延迟、独立 Worker 到期投递和在途正文保密。完整个人资料、城市故事、地图、共途、信友、纪念册、审核、通知等功能尚未实现。
+当前仓库完成 **TASK-001～TASK-008**：可运行的基础工程、账号注册/登录/会话/退出（含单活动会话）、49 条城市目录、最小个人资料与 `/settings`、邮局三栏与距离延迟投递、城市故事草稿/提交/管理员审核/公开故事站、世界记忆地图的业务入口（城市聚合与单城市故事页）、共途的列表/详情与停泊/续程/完成/归档，以及共途通信许可接入邮局（停泊后新的共途明信片不能寄出）。共途邀请、信友、纪念册、举报/封锁、通知等功能尚未实现；地图仍不包含任何渲染技术。
 
 ## 当前进度
 
@@ -12,9 +12,13 @@ Somewhere 是一个 Web 优先的慢社交产品：用按距离延迟抵达的�
 | TASK-002 | DONE | AUTH 响应收敛、单活动会话、认证回归与证据 |
 | TASK-003 | DONE | 城市目录（49 条）、最小资料、`/settings`、集成/契约/E2E/Smoke |
 | TASK-004 | DONE | 邮局三栏、明信片草稿/发送、距离延迟、Worker、在途保密、每日上限 |
-| 下一任务 | 未开始 | 建议城市故事站与审核最小闭环；等待批准 |
+| TASK-005 | DONE | 城市故事草稿/提交/撤回、`ADMIN` 审核、公开故事站与详情、城市容量与提交配额 |
+| TASK-006 | DONE | 世界记忆地图业务入口：城市聚合接口、`/discover/map` 城市入口、单城市故事页、公开谓词单点化 |
+| TASK-007 | DONE | 共途三表与 6 个接口、列表/详情、停泊/续程/完成/归档、`canSend`、非生产 seed、并发与幂等 |
+| TASK-008 | DONE | 草稿/明信片 `passage_id`、共途收件人、发送时强制 `canSend`、共途写信入口与上下文 |
+| 下一任务 | 未开始 | 建议双向信友（`PenpalModule`）；等待批准 |
 
-详细验收记录见 `tasks/current.md` 与 `tasks/archive/`；最近一次全量证据见 `artifacts/verification/TASK-004/`。
+详细验收记录见 `tasks/current.md` 与 `tasks/archive/`；最近一次全量证据见 `artifacts/verification/TASK-008/`。
 
 ## 技术栈
 
@@ -90,12 +94,12 @@ pnpm --filter @somewhere/api worker
 pnpm lint              # ESLint（TS + Vue）
 pnpm typecheck         # 前端、后端、api-client 严格类型检查
 pnpm build             # Nest 编译 + Vite 构建
-pnpm test:unit         # 认证策略、距离/延迟、正文、可见性、Web 路由/客户端
-pnpm test:integration  # NestJS HTTP + 真实 PostgreSQL（隔离 test 库，含邮局/Worker）
+pnpm test:unit         # 认证策略、距离/延迟、明信片、故事状态、Web 路由/客户端
+pnpm test:integration  # NestJS HTTP + 真实 PostgreSQL（含故事审核、邮局/Worker）
 pnpm test:contract     # OpenAPI 与 packages/api-client 生成产物一致性
 pnpm test:architecture # 层次依赖、跨模块导入、浏览器存储禁令
-pnpm test:e2e          # Playwright：认证、四导航、设置页、邮局寄出→送达闭环
-pnpm test:smoke        # 构建产物 + 真实 HTTP 的 5–10 分钟冒烟（含 Worker 只投递一次）
+pnpm test:e2e          # Playwright：认证、四导航、设置、故事审核闭环、邮局送达
+pnpm test:smoke        # 构建产物 + 真实 HTTP 冒烟（含故事/邮局闭环与 Worker 只投递一次）
 pnpm verify            # 串行执行以上全部；任一失败返回非 0
 ```
 
@@ -105,38 +109,56 @@ pnpm verify            # 串行执行以上全部；任一失败返回非 0
 测试环境要求：
 
 - `TEST_DATABASE_URL` 必须指向库名包含 `test` 的本机数据库；脚本会拒绝生产或非测试库。
-- 集成测试与 E2E 在开始前执行 `prisma migrate deploy`，E2E 还会清空测试库中的 `postcard_drafts` / `postcards` / `profiles` / `users` / `sessions`，保留城市目录。
+- 集成测试与 E2E 在开始前执行 `prisma migrate deploy`，E2E 还会清空测试库中的 `passage_events` / `passage_participants` / `passages` / `story_review_actions` / `stories` / `postcard_drafts` / `postcards` / `profiles` / `users` / `sessions`，保留城市目录。
 - E2E 需要本机 Chrome；如需改用 Playwright 自带浏览器，运行
   `pnpm exec playwright install chromium` 并移除 `tests/e2e/playwright.config.ts` 中的 `channel: 'chrome'`。
 
-## API（TASK-004）
+## API 一览（TASK-001～TASK-007）
 
 | Method | Path | 说明 |
 |---|---|---|
 | POST | `/api/v1/auth/register` | 注册并建立会话；邮箱正规化后唯一；响应不含 email |
 | POST | `/api/v1/auth/login` | 登录并轮换会话，撤销该账号其他活动会话；响应不含 email |
 | POST | `/api/v1/auth/logout` | 撤销当前会话并清理 Cookie |
-| GET | `/api/v1/auth/me` | 当前用户资料；唯一返回本人 email 的认证接口 |
+| GET | `/api/v1/auth/me` | 当前用户资料与本人角色；唯一返回本人 email 的认证接口 |
 | GET | `/api/v1/cities?query=` | 公开城市目录；只返回 `id/name/countryCode`，不返回经纬度 |
 | GET | `/api/v1/profile/me` | 登录本人昵称、城市与接信状态 |
 | PATCH | `/api/v1/profile/me` | 修改本人昵称、城市与接信状态 |
-| GET | `/api/v1/postcards/recipients` | 演示白名单收件人；不含 email/坐标 |
+| GET | `/api/v1/postcards/recipients?passageId=` | 缺省为演示白名单；带 `passageId` 时只返回共途对方，不含 email/坐标 |
 | GET | `/api/v1/post-office/summary` | 邮局三栏摘要；不返回正文 |
-| GET/POST | `/api/v1/postcards/drafts` | 列出/创建本人草稿 |
+| GET/POST | `/api/v1/postcards/drafts` | 列出/创建本人草稿；创建时可选 `passageId`，收件人由共途对方解析 |
 | GET/PATCH/DELETE | `/api/v1/postcards/drafts/:id` | 仅作者、仅未发送 |
 | POST | `/api/v1/postcards/drafts/:id/send` | 原子发送；支持 `Idempotency-Key` |
 | GET | `/api/v1/postcards/transit` | 本人寄出的在途信；不含正文 |
 | GET | `/api/v1/postcards/inbox` | 本人已送达来信 |
 | GET | `/api/v1/postcards/:id` | 寄件人可读；收件人仅送达后可读 |
+| GET | `/api/v1/stories` | 公开故事列表；仅审核通过、已发布、未归档；支持城市/主题/游标 |
+| GET | `/api/v1/stories/:id` | 公开故事详情；非公开统一 404 |
+| POST | `/api/v1/stories` | 登录；创建故事草稿 |
+| GET | `/api/v1/stories/mine` | 登录；我的全部状态故事 |
+| GET | `/api/v1/stories/mine/:id` | 登录；我的单条故事详情 |
+| PATCH | `/api/v1/stories/:id` | 登录；仅作者、仅草稿/未通过 |
+| POST | `/api/v1/stories/:id/submit` | 登录；提交审核；7 天最多 3 次 |
+| POST | `/api/v1/stories/:id/withdraw` | 登录；撤回公开授权 |
+| DELETE | `/api/v1/stories/:id` | 登录；仅删除草稿 |
+| GET | `/api/v1/discovery/cities` | 公开；世界记忆地图城市入口，只返回有活跃公开故事的城市与数量；支持主题筛选 |
+| GET | `/api/v1/passages?status=` | 登录；本人参与的共途，支持 ALL/ACTIVE/COMPLETED/ARCHIVED |
+| GET | `/api/v1/passages/:id` | 登录；仅参与者，非参与者统一 404 |
+| POST | `/api/v1/passages/:id/pause` | 登录；只停泊本人许可，幂等 |
+| POST | `/api/v1/passages/:id/resume` | 登录；只续程本人许可，不能替代对方 |
+| POST | `/api/v1/passages/:id/complete` | 登录；任一参与者完成经历，不改双方许可 |
+| POST | `/api/v1/passages/:id/archive` | 登录；经历级归档，历史与详情仍可读 |
+| GET | `/api/v1/moderation/queue` | 仅 `ADMIN`；待审核故事队列 |
+| POST | `/api/v1/moderation/stories/:id/decision` | 仅 `ADMIN`；通过/驳回/下架，不能自审 |
 | GET | `/api/v1/health` | API + 数据库连通性 |
 
 注册/登录成功响应：
 
 ```json
-{ "id": "uuid", "nickname": "海边写信的人", "emailVerified": false, "cityId": null }
+{ "id": "uuid", "nickname": "海边写信的人", "emailVerified": false, "cityId": null, "role": "USER" }
 ```
 
-`GET /auth/me` 在上述字段基础上额外返回本人 `email`。
+`GET /auth/me` 在上述字段基础上额外返回本人 `email`。只有 `ADMIN` 可访问审核接口；角色通过非生产脚本授予：`pnpm --filter @somewhere/api admin:grant --email=<虚构账号>`。
 
 错误响应统一为：
 
@@ -145,8 +167,8 @@ pnpm verify            # 串行执行以上全部；任一失败返回非 0
 ```
 
 错误码：`VALIDATION_ERROR(422)`、`REGISTRATION_CONFLICT(409)`、`AUTH_INVALID_CREDENTIALS(401)`、
-`AUTH_REQUIRED(401)`、`ORIGIN_NOT_ALLOWED(403)`、`RATE_LIMITED(429)`、`NOT_FOUND(404)`、
-`RESOURCE_NOT_ACCESSIBLE(404)`、`SERVICE_UNAVAILABLE(503)`。
+`AUTH_REQUIRED(401)`、`FORBIDDEN(403)`、`ORIGIN_NOT_ALLOWED(403)`、`RATE_LIMITED(429)`、`NOT_FOUND(404)`、
+`RESOURCE_NOT_ACCESSIBLE(404)`、`STORY_STATE_CONFLICT(409)`、`PASSAGE_STATE_CONFLICT(409)`、`SERVICE_UNAVAILABLE(503)`。
 
 ## 安全基线
 
@@ -167,8 +189,8 @@ pnpm verify            # 串行执行以上全部；任一失败返回非 0
 ## 目录
 
 ```text
-apps/api/            NestJS API、Prisma schema / 迁移 / seed、投递 Worker
-apps/web/            Vue 3 Web（四导航、认证页、邮局与写信/详情页）
+apps/api/            NestJS API、Prisma schema / 迁移 / seed、投递 Worker、故事审核、发现聚合
+apps/web/            Vue 3 Web（四导航、认证页、邮局、故事站、地图入口、共途与审核台）
 packages/api-client/ OpenAPI 自动生成的类型 + 轻量 fetch 客户端
 tests/e2e/           Playwright 黑盒路径
 tests/contract/      OpenAPI 契约检查
@@ -178,6 +200,6 @@ infra/postgres/      本地数据库初始化脚本
 docs/ specs/ tasks/  架构、测试规范、功能规范与当前任务
 ```
 
-## 当前阶段（TASK-004）明确不做
+## 当前阶段（TASK-008）明确不做
 
-不实现回信、通知、城市故事、地图渲染、共途、信友、纪念册、审核后台、举报/封锁、善意接力；不实现完整 Profile（bio、语言、主题标签、可见性、公开资料页）、邮箱验证与找回密码；发现/共途/纪念册仍只展示真实空态，不提供伪造入口。`RESTRICTED` 只有枚举与读取拒绝，没有审核处置路径。
+不实现共途邀请 / 创建入口、邀请通知与邀请专项测试；不实现回信、`reply_to_postcard_id`、模板与多媒体；不实现信友、纪念册、双城日记、共同手帐、个人记忆、通知、举报/封锁、善意接力；不实现任何地图渲染技术（地图引擎、瓦片、地理图层、二维/三维方案）与显示城市/上地图开关、匿名作者、30 天轮换；不实现完整 Profile（bio、语言、主题标签、可见性、公开资料页）、邮箱验证与找回密码。共途没有 HTTP 创建入口，测试与本地演示使用非生产脚本 `apps/api/scripts/seed-passage.mjs`；纪念册仍只展示真实空态。`RESTRICTED` 只有枚举与读取拒绝，`CLOSED` 只有只读判定，均没有通用处置路径。故事审核台只处理城市故事，并禁止管理员审核自己的故事。世界记忆地图只复用已审核公开故事，不新增“地图故事”实体。无 `passageId` 的邮局草稿仍使用受控演示白名单，不开放用户搜索。

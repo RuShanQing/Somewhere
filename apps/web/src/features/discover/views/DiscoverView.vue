@@ -1,7 +1,50 @@
 <script setup lang="ts">
+import { onMounted, ref } from 'vue';
+import { api, type CitySummary } from '../../../shared/api/client';
+import { useAuthStore } from '../../../shared/stores/auth';
 import EmptyState from '../../../shared/ui/EmptyState.vue';
 import PageHeader from '../../../shared/ui/PageHeader.vue';
 import SectionCard from '../../../shared/ui/SectionCard.vue';
+import DiscoverNav from '../components/DiscoverNav.vue';
+import StoryCard from '../components/StoryCard.vue';
+import { usePublicFeed } from '../composables/usePublicFeed';
+
+const auth = useAuthStore();
+const cities = ref<CitySummary[]>([]);
+const cityId = ref('');
+const topic = ref('');
+const appliedFilters = ref<{ cityId?: string; topic?: string }>({});
+
+const {
+  items,
+  nextCursor,
+  isLoading,
+  isLoadingMore,
+  loadError,
+  load,
+  loadMore,
+} = usePublicFeed(() => appliedFilters.value);
+
+async function loadCities(): Promise<void> {
+  try {
+    cities.value = await api.cities();
+  } catch {
+    cities.value = [];
+  }
+}
+
+function applyFilters(): void {
+  appliedFilters.value = {
+    ...(cityId.value ? { cityId: cityId.value } : {}),
+    ...(topic.value.trim() ? { topic: topic.value.trim() } : {}),
+  };
+  void load();
+}
+
+onMounted(async () => {
+  await loadCities();
+  await load();
+});
 </script>
 
 <template>
@@ -9,33 +52,74 @@ import SectionCard from '../../../shared/ui/SectionCard.vue';
     <PageHeader
       eyebrow="发现"
       title="看看别人生活的城市"
-      description="城市故事站与世界记忆地图共用同一批已审核故事。当前没有可展示的公开内容，也不会用示例故事填充页面。"
+      description="这里只展示作者主动公开、并通过管理员审核的城市生活片段。没有热度榜，也不会催你回应。"
     />
 
-    <div class="section-stack">
-      <SectionCard title="城市故事站" description="经作者授权并通过审核的城市生活片段。">
-        <EmptyState
-          title="还没有已审核的城市故事"
-          description="故事会先经过审核，再同时出现在故事站与地图的城市入口。"
-          hint="你可以稍后回来，或者先去邮局写下自己的第一封信。"
-        />
-      </SectionCard>
+    <DiscoverNav active="stories" />
 
-      <SectionCard title="善意的接力" badge="暂未开放 · P1" description="不要求回信、不建立债务的弱连接。">
-        <EmptyState
-          title="这一功能还在计划中"
-          description="未来它会允许你把一份善意交给陌生人，而不必等待回应。"
-          hint="当前没有可点击的入口，也不会伪造接力内容。"
-        />
-      </SectionCard>
-
-      <SectionCard title="世界记忆地图" description="按城市浏览同一批已审核故事；地图不产生独立内容。">
-        <EmptyState
-          title="地图入口尚未开放"
-          description="地图只做城市级入口，不收集精确位置，也不展示未经审核的故事。"
-          hint="地图渲染方案不在本阶段范围内。"
-        />
-      </SectionCard>
+    <div class="post-office-actions">
+      <RouterLink
+        class="button"
+        :to="auth.isAuthenticated ? { name: 'story-write' } : { name: 'login', query: { redirect: '/discover/write' } }"
+      >
+        写一段城市故事
+      </RouterLink>
+      <RouterLink v-if="auth.isAuthenticated" class="button button-quiet" :to="{ name: 'my-stories' }">
+        我的故事
+      </RouterLink>
+      <p class="field-hint">故事先提交审核，通过后才会出现在这里。</p>
     </div>
+
+    <form class="filter-row" @submit.prevent="applyFilters">
+      <div class="form-field">
+        <label for="story-city-filter">城市</label>
+        <select id="story-city-filter" v-model="cityId">
+          <option value="">全部城市</option>
+          <option v-for="city in cities" :key="city.id" :value="city.id">
+            {{ city.name }}
+          </option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label for="story-topic-filter">主题</label>
+        <input id="story-topic-filter" v-model="topic" type="search" placeholder="例如：雨天、书店" />
+      </div>
+      <button class="button button-quiet" type="submit">筛选</button>
+    </form>
+
+    <p v-if="isLoading" class="form-status" role="status">正在整理故事站…</p>
+
+    <div v-else-if="loadError" class="section-card">
+      <p class="form-alert" role="alert">{{ loadError }}</p>
+      <button class="button button-quiet" type="button" @click="load">重新读取</button>
+    </div>
+
+    <SectionCard
+      v-else
+      title="城市故事站"
+      :badge="String(items.length)"
+      description="按发布时间阅读，不按点赞或浏览量排序。"
+    >
+      <ul v-if="items.length > 0" class="story-list">
+        <StoryCard v-for="story in items" :key="story.id" :story="story" />
+      </ul>
+
+      <EmptyState
+        v-else
+        title="还没有符合条件的故事"
+        description="这里只展示已经通过审核、作者同意公开的内容；不会用示例故事填充。"
+        hint="你可以换一个城市或主题，或者写下自己的第一段故事。"
+      />
+
+      <div v-if="nextCursor" class="form-actions">
+        <button class="button button-quiet" type="button" :disabled="isLoadingMore" @click="loadMore">
+          {{ isLoadingMore ? '正在读取…' : '继续读下去' }}
+        </button>
+      </div>
+    </SectionCard>
+
+    <p class="field-hint story-footnote">
+      世界记忆地图复用同一批已审核故事，只显示城市级信息，不收集实时位置或精确住址。
+    </p>
   </div>
 </template>

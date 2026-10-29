@@ -1,154 +1,160 @@
-# 当前开发任务 · TASK-004
+# 当前开发任务 · TASK-008
 
-状态：**DONE（TASK-004 已完成并通过门禁，等待下一任务指令）**  
-任务名称：**POSTCARD 薄切片：明信片草稿、距离延迟、投递 Worker 与邮局三栏**  
-任务类型：P0 邮局 / 明信片 / 异步投递  
-优先级：P0  
-变更授权：本文件授权范围内；TASK-001/002/003 的验收记录已归档到 `tasks/archive/`。
+状态：**DONE（TASK-008 已完成并通过门禁，等待下一任务指令）**
+
+任务名称：**PASSAGE-LINK 切片：共途通信许可接入邮局**
+
+任务类型：P0 共途 / 通信许可
+
+优先级：P0
+
+变更授权：本文件授权范围内；TASK-007 验收记录已归档到 `tasks/archive/TASK-007.md`。
 
 ## 1. 背景与目标
 
-认证（TASK-002）与城市/接信状态（TASK-003）已完成。按 PRD 的 P0 顺序，下一阶段实现 `OFF-01 / OFF-02 / OFF-03`：明信片草稿、发送、按城市距离延迟、邮局的新来信/在途/草稿。
-
-本任务只做**邮局与明信片薄切片**，不实现共途、信友、城市故事、纪念册、通知与审核后台。
+TASK-007 已实现共途状态、参与者许可与 `PassagePolicy`，但邮局仍只使用演示收件人白名单，`PassagePolicy` 没有真实消费者。本任务把许可接入发送链路，让「停泊 / 关闭阻断新的共途通信」从策略变成可验证的外部行为。
 
 核心闭环：
 
 ```text
-写草稿 → 选择收件人 → 服务端计算 deliverAt → 在途 → 到期 Worker 投递一次
-→ 收件人“新来信”可读 → 寄件人仍可查看自己寄出的内容
+共途详情（双方 ALLOW、ACTIVE）→ 写一张明信片（携带 passageId）
+→ 收件人由服务端解析为共途对方 → 按城市距离计算 ETA → 正常投递
+任一方停泊 → 新的 passage 明信片发送被拒绝（409）
+→ 已在途的信仍按原 deliverAt 送达
 ```
+
+**仍然不实现共途邀请 / 创建入口**；测试与本地演示使用非生产脚本建立共途。
 
 ## 2. 已确认的范围决策
 
 | 决策 | 结论 |
 |---|---|
-| 收件人来源 | 本阶段使用环境变量 `POSTCARD_DEMO_RECIPIENT_EMAILS` 配置的演示收件人；服务端强制白名单，不开放用户搜索 |
-| 每日发送上限 | 每账号滚动 24 小时最多 **10 张成功寄出**；配置项 `POSTCARD_MAX_SENDS_PER_DAY=10`；第 11 张返回 429 |
-| 回信 | 本阶段不做；不渲染无实际功能的回信按钮 |
-| 通知 | 本阶段不做；Worker 只保证投递状态只变一次，不伪造通知去重 |
-| 审核/封锁 | 本阶段不实现举报、封锁、审核后台；`RESTRICTED` 只保留枚举与拒绝正文读取 |
-| 技术栈 | 保持 Prisma + Vitest + Playwright；不引入 TypeORM / Docker Compose / Jest |
-| 收件人城市 | 发送时冻结双方城市快照；发送后改城市不影响旧信 |
-| 正文 | 1–2000 个 Unicode 码点；拒绝全空白；发送后不可修改 |
+| 数据 | `postcard_drafts`、`postcards` 各增加**可空** `passage_id`；只新增列、外键与索引，不修改既有行 |
+| 收件人来源 | `passageId` 存在时，收件人由服务端解析为共途的另一位参与者；不开放用户搜索 |
+| 兼容 TASK-004 | 无 `passageId` 的草稿继续走演示白名单，行为与测试不变 |
+| 草稿绑定 | 仅创建草稿时接受 `passageId`；创建后不可改绑，避免草稿中途换关系 |
+| 停泊时能否存草稿 | 可以保存草稿（草稿不是通信行为），但**不能寄出** |
+| 发送被拒绝 | `409 PASSAGE_STATE_CONFLICT`，不创建明信片、不消耗每日额度、不消耗草稿 |
+| 收件人列表 | `GET /postcards/recipients?passageId=`：参与者可读；仅在 `canSend` 且有城市且 `OPEN` 时返回对方一人，否则空数组 |
+| 接信状态 | 仍独立校验；共途允许但对方 `RESTING/CLOSED` 时按现有 `recipient:notReceiving` 拒绝 |
+| 修改既有发送事务 | 只在写入时增加 `passageId`；幂等、日限、草稿 claim、Worker 逻辑不变 |
+| 邀请 / 信友 / 纪念册 | 不实现 |
 
 ## 3. 功能范围
 
 ### 3.1 数据库
 
-- 新增 `postcard_drafts`：`id`、`owner_id`、`recipient_id?`、`body`、`sent_postcard_id?`、`created_at`、`updated_at`。
-- 新增 `postcards`：`id`、`sender_id`、`receiver_id`、`body`、`status`、`origin_city_id`、`destination_city_id`、`sent_at`、`deliver_at`、`delivered_at?`、`idempotency_key?`、`created_at`、`updated_at`。
-- 枚举 `PostcardStatus`：`IN_TRANSIT / DELIVERED / RESTRICTED`。
-- 约束：正文长度与全空白、`sender_id <> receiver_id`、`deliver_at >= sent_at`、`delivered_at >= deliver_at`；`(sender_id, idempotency_key)` 唯一。
-- 索引：`(receiver_id, status, deliver_at)`、`(status, deliver_at)`、`(sender_id, status)`、草稿 `(owner_id, updated_at)`。
-- 新增显式迁移；测试清库脚本清理新表并保留 `cities`。
+新增迁移（仅新增）：
+
+- `postcard_drafts.passage_id UUID NULL`，外键 → `passages(id)` `ON DELETE RESTRICT`；
+- `postcards.passage_id UUID NULL`，外键 → `passages(id)` `ON DELETE RESTRICT`；
+- 两个 `passage_id` 索引；
+- 不新增表、不改变既有约束与状态枚举。
 
 ### 3.2 后端接口
 
-| Method | Path | 说明 |
+| Method | Path | 变化 |
 |---|---|---|
-| GET | `/api/v1/postcards/recipients` | 登录；只返回配置允许、状态 OPEN 且已有城市的演示收件人 |
-| GET | `/api/v1/post-office/summary` | 登录；三组摘要，不含正文 |
-| GET | `/api/v1/postcards/drafts` | 本人未发送草稿 |
-| POST | `/api/v1/postcards/drafts` | 创建草稿 |
-| GET | `/api/v1/postcards/drafts/:id` | 仅作者读取草稿 |
-| PATCH | `/api/v1/postcards/drafts/:id` | 仅作者、未发送 |
-| DELETE | `/api/v1/postcards/drafts/:id` | 仅作者、未发送 |
-| POST | `/api/v1/postcards/drafts/:id/send` | 原子发送；支持 `Idempotency-Key` |
-| GET | `/api/v1/postcards/transit` | 本人寄出的在途信 |
-| GET | `/api/v1/postcards/inbox` | 本人已送达的来信 |
-| GET | `/api/v1/postcards/:id` | 寄件人可读自己的内容；收件人仅送达后可读 |
+| GET | `/api/v1/postcards/recipients?passageId=` | 新增可选查询参数；缺失时保持演示白名单行为 |
+| POST | `/api/v1/postcards/drafts` | 接受可选 `passageId`；服务端解析收件人 |
+| PATCH | `/api/v1/postcards/drafts/:id` | 若草稿已绑定共途，收件人只能保持为对方；不允许改绑 |
+| POST | `/api/v1/postcards/drafts/:id/send` | 绑定共途时校验 `PassagePolicy.canSend`，收件人以服务端解析为准 |
+| GET | `/api/v1/postcards/drafts`、`/drafts/:id` | 响应新增 `passageId`（可空） |
 
 规则：
 
-- 未登录 401 `AUTH_REQUIRED`；他人草稿/明信片/未送达详情返回 404 `RESOURCE_NOT_ACCESSIBLE`。
-- 延迟：`delayMinutes = min(7200, 720 + ceil(D_km * 60 / 150))`，`deliverAt = sentAt + delayMinutes`，全部服务端 UTC。
-- 发送事务内校验发件人、收件人、白名单、接信状态、城市、自我发送与每日上限；写入城市快照。
-- 同一草稿或同一幂等键重复发送只产生一张明信片。
-- 在途列表、摘要、收件箱不返回正文；收件人详情在送达前 404。
+- 非参与者对 `passageId` 一律 404 `RESOURCE_NOT_ACCESSIBLE`，不泄露共途是否存在；
+- `canSend=false` 时发送返回 409 `PASSAGE_STATE_CONFLICT`；
+- 草稿 `recipientId` 与共途对方不一致时返回 422 `VALIDATION_ERROR`；
+- 共途明信片仍按双方城市快照与既有公式计算 `deliverAt`，客户端不能指定；
+- 在途保密、送达后阅读、Worker 只投递一次的规则不变。
 
 ### 3.3 Web
 
-- `/post-office`：新来信、正在路上、草稿三栏；加载/空态/错误态/重试；真实空态。
-- `/post-office/compose`：收件人选择、正文编辑、字数提示、保存草稿、寄出确认、失败提示。
-- `/postcards/:id`：详情；送达前收件人不可访问；正文只按服务端权限返回。
-- 390px 可用、键盘可操作、表单有 label；不显示在线/已读/催促/连续天数。
+- `/passages/:id`：`permissions.canSend=true` 时显示「写一张明信片」入口，跳转 `/post-office/compose?passageId=<id>`；停泊 / 关闭 / 完成后不显示入口；
+- `/post-office/compose`：读取 `query.passageId`，加载共途详情与共途收件人，显示「这段共途 · <主题>」，收件人预选且不可改成其他人；
+- 保存草稿后保留 `passageId`；寄出成功沿用现有明信片详情跳转；
+- 不显示在线状态、已读回执、亲密度或倒计时；无入口时不渲染假按钮。
 
 ## 4. 明确不做
 
-- 回信、对话、模板、图片/录音/插画、多媒体。
-- 通知、邮件提醒、未读计数、公开已读回执、在线状态。
-- 举报、封锁、审核后台、`RESTRICTED` 的实际处置动作。
-- 城市故事、世界记忆地图、善意接力。
-- 共途、信友、停泊/续程/归档、双城日记、共同手帐、个人记忆。
-- 用户搜索、陌生人发现、公开资料页、自建城市。
-- 邮箱验证、找回密码、设备会话、账号删除、OAuth。
-- TypeORM、Docker Compose、Jest 迁移。
-- 二维/三维地图与共途邀请专项测试。
+- 共途邀请、接受、拒绝、按用户搜索、公开用户目录；
+- 信友、纪念册、双城日记、共同手帐、个人记忆；
+- 通知、举报 / 封锁 / `RESTRICT`、`CLOSED` 写入口；
+- 回信、`reply_to_postcard_id`、模板、多媒体、共同草稿；
+- 善意接力、地图渲染、热度 / 点赞 / 评论 / 推荐；
+- 修改 TASK-004 的延迟公式、每日上限、Worker 行为与在途保密规则；
+- 邮箱验证、找回密码、OAuth、账号删除、设备会话。
 
 ## 5. 工作拆分
 
-- [x] `T4-01` 写入任务卡与 Spec 边界；确认每日上限 10。
-- [x] `T4-02` Prisma schema、迁移、测试清库脚本。
-- [x] `T4-03` 失败测试：距离/延迟、正文、可见性、草稿、发送、读取、Worker。
-- [x] `T4-04` PostcardModule + DeliveryModule + Worker + 全部 API。
-- [x] `T4-05` Web 邮局三栏、写信页、详情页、API 客户端。
-- [x] `T4-06` 契约、架构、E2E、Smoke、文档同步。
-- [x] `T4-07` 执行 `pnpm verify`、失败证明与证据归档。
+- [x] `T8-01` 任务卡与 `specs/05`、`specs/09`、`docs/architecture.md`、`docs/testing.md`、`specs/00-index.md` 口径。
+- [x] `T8-02` RED：单元、集成、契约、E2E、Smoke 失败测试与证据。
+- [x] `T8-03` 迁移：两个可空 `passage_id`、外键与索引。
+- [x] `T8-04` `PassageReader`：共途参与者与 `canSend` 的唯一跨模块读取入口。
+- [x] `T8-05` 邮局：草稿绑定、收件人列表、发送事务校验。
+- [x] `T8-06` 重新生成 OpenAPI 客户端并更新契约检查。
+- [x] `T8-07` Web：共途入口、写信页共途上下文、组件测试。
+- [x] `T8-08` E2E、Smoke、全量 `pnpm verify`、失败证明与证据归档。
 
 ## 6. 验收条件
 
-### AC-01 · 数据库与迁移
+### AC-01 · 草稿绑定
 
-Given 空测试库，When 执行 `db:deploy`，Then 两张表、枚举、索引和检查约束存在；约束拒绝空正文、2001 字符、自我发送与非法时间；清库后 `cities` 保留。
+Given 我是共途参与者，When `POST /postcards/drafts` 携带 `passageId`，Then 201 且 `passageId` 回显、`recipient` 为对方；Given 我不是参与者，Then 404 且不创建草稿；Given `recipientId` 指向第三人，Then 422 且不创建草稿。
 
-### AC-02 · 草稿
+### AC-02 · 共途收件人
 
-Given 已登录用户，When 创建/读取/修改/删除草稿，Then 仅本人可操作；2001 字符与全空白返回 422；已发送草稿不再出现在列表且不可修改。
+Given 双方 `ALLOW` 且 `ACTIVE`，When `GET /postcards/recipients?passageId=`，Then 只返回对方一人且无 email/坐标；Given 任一方 `PAUSED/CLOSED` 或进度非 `ACTIVE`，Then 返回空数组；Given 非参与者，Then 404。
 
-### AC-03 · 发送与距离
+### AC-03 · 发送许可
 
-Given 双方已设置城市且收件人允许接信，When 寄出，Then 服务端生成 `sentAt/deliverAt` 并冻结城市快照；同城 12 小时、最远 120 小时；改城市不影响旧信；重复发送只产生一张；缺城市/自我发送/非白名单/CLOSED/RESTING 被拒绝；第 11 张返回 429。
+Given 双方 `ALLOW` 且 `ACTIVE`，When 寄出绑定共途的草稿，Then 201、新明信片 `passageId` 正确、收件人为对方、`deliverAt` 由服务端按城市距离生成；Given 任一方已停泊或关闭，Then 409 `PASSAGE_STATE_CONFLICT`，数据库无新明信片、草稿仍可用、每日额度不变。
 
-### AC-04 · 在途保密
+### AC-04 · 兼容与不回退
 
-Given 明信片仍在途，When 收件人访问摘要、收件箱或详情，Then 任何响应都不含正文，详情为 404；寄件人仍可读取自己的正文；所有响应不含 email、密码或 Session。
+Given 无 `passageId` 的草稿，When 使用演示白名单寄出，Then 行为与 TASK-004 完全一致；`recipientId` 为空 / 自己 / 非白名单仍按原错误拒绝；幂等键、重复发送、每日 10 张上限、在途正文保密、Worker 只投递一次全部保持。
 
-### AC-05 · 到期投递
+### AC-05 · 接信状态独立
 
-Given 明信片已到期，When Worker 扫描两次或并发扫描，Then 状态只变为 `DELIVERED` 一次，`deliveredAt` 不被覆盖；收件箱恰好出现一封；刷新不回退。
+Given 共途允许但对方 `receptionMode != OPEN`，When 寄出，Then 按现有规则返回 422，且不写 `postcards`；共途许可不能绕过接信状态或城市缺失。
 
-### AC-06 · 邮局页面
+### AC-06 · Web
 
-Given 已登录用户，When 使用邮局与写信页，Then 三栏状态真实、草稿保存后刷新仍在、寄出后进入在途、收件人提前访问失败、送达后可读；390px 与键盘可用；无在线/已读/催促元素。
+Given `canSend=true`，When 打开共途详情，Then 显示「写一张明信片」；When 点击，Then 写信页显示共途主题与对方且收件人不可改为第三人；Given 停泊 / 关闭 / 完成 / 归档，Then 详情无该入口；390px 与键盘可操作。
 
-### AC-07 · 回归与安全
+### AC-07 · 数据库
 
-TASK-001/002/003 的认证、会话轮换、Cookie、Origin、限流、日志脱敏、城市/资料全部保持通过；跨用户访问统一返回 401/404；前端不使用 localStorage/sessionStorage。
+只有一次新增迁移；空库 `migrate deploy` 可重放；`prisma migrate status` 无待执行；既有行回填为 `NULL`；外键阻止删除被引用的共途；新增列与索引符合 schema。
 
-### AC-08 · 质量门禁
+### AC-08 · 回归与安全
 
-`pnpm lint`、`typecheck`、`build`、`test:unit`、`test:integration`、`test:contract`、`test:architecture`、`test:e2e`、`test:smoke` 实际运行并通过；`pnpm verify` 退出码 0；故意制造一次非敏感失败时 verify 返回非 0 并恢复。
+TASK-001～007 全部测试保持通过；非参与者 404、停泊 409、外站 Origin 403、注销会话 401；响应与日志不出现 email、坐标、正文或会话值。
+
+### AC-09 · 质量门禁
+
+`pnpm lint`、`typecheck`、`build`、`test:unit`、`test:integration`、`test:contract`、`test:architecture`、`test:e2e`、`test:smoke`、`pnpm verify` 实际运行并通过，退出码 0；故意制造一次非敏感失败时返回非 0 并恢复。
 
 ## 7. 开发步骤
 
-1. 只读检查现有 schema、迁移、测试清库脚本、路由与测试工具。
-2. 先写 HTTP 集成失败测试，记录 404 红灯。
-3. 迁移与数据模型 → 领域纯函数 → 仓储/服务/控制器。
-4. 发送事务、幂等、每日上限与 Worker。
-5. 重新生成 OpenAPI 客户端；补充契约、E2E、Smoke。
-6. 全量回归、失败证明、文档与证据回写。
+1. 文档口径与本任务卡。
+2. RED：`passage-postcards.spec.ts`、客户端/契约、E2E、Smoke 失败用例。
+3. 迁移与 Prisma Client 生成。
+4. `PassageReader` → 邮局 DTO / 服务 / 仓储。
+5. 重新生成 OpenAPI 客户端与契约检查。
+6. Web 共途入口与写信页共途上下文。
+7. E2E、Smoke、全量回归、失败证明与证据归档。
 
-## 8. 执行记录（实施后填写）
+## 8. 执行记录（实测）
 
 | 字段 | 当前值 |
 |---|---|
-| 开始时间 | 2026-10-28 15:55（UTC+8） |
+| 开始时间 | 2026-10-29（UTC+8） |
 | 环境 | macOS；Node v24.20.0；pnpm 12.15.0；PostgreSQL 17.11；Playwright 1.64.1 + 本机 Chrome |
-| 代码变更 | Prisma `postcard_drafts`/`postcards` 与迁移 `20261028070751_add_postcards`；`PostcardModule`、`DeliveryModule`、`src/worker`、`run-delivery-once`；Web `/post-office`、`/post-office/compose/:id?`、`/postcards/:id`；API client 新方法与类型 |
-| 新增/更新测试 | 后端单元 10 文件 / 57 用例；Web 单元 5 文件 / 30 用例；集成 4 文件 / 35 用例；Playwright 15 用例；Smoke 14 项；契约 15 条路径 |
+| 代码变更 | `prisma/schema.prisma` 与 `20261029090000_add_postcard_passage`：`postcard_drafts.passage_id`、`postcards.passage_id`、外键与索引；`passage/passage-reader.service.ts` 新增并导出；`postcard/domain/passage-binding.ts`；`postcard.service.ts` 草稿绑定、收件人解析、发送许可；`draft.dto.ts`、`recipients-query.dto.ts`、`postcard-response.dto.ts`、`postcards.controller.ts`、`postcard.module.ts`、`draft.repository.ts`、`postcard.repository.ts`；Web `ComposeView.vue` 共途上下文与返回入口、`PassageDetailView.vue` 共途写信入口；生成客户端与 `postcardRecipients(passageId?)` |
+| 新增/更新测试 | 后端单元 15 文件 / 92 用例（新增 3）；Web 单元 8 文件 / 48 用例（新增 1）；集成 8 文件 / 80 用例（新增 8）；契约仍 30 条路径（新增 `passageId` 字段与查询参数断言）；Playwright 20 用例（扩展现有共途用例）；Smoke 17 项（原有共途检查加入停泊阻断发信） |
 | 实际运行命令 | `pnpm lint`、`pnpm typecheck`、`pnpm build`、`pnpm test:unit`、`pnpm test:integration`、`pnpm test:contract`、`pnpm test:architecture`、`pnpm test:e2e`、`pnpm test:smoke`、`pnpm verify` |
-| 通过项 | 最终 `pnpm verify` 9/9 子门禁 PASS，退出码 0；证据目录 `artifacts/verification/TASK-004/verify/2026-10-28T08-25-27-878Z` |
+| 通过项 | `pnpm verify` 9/9 子门禁 PASS，退出码 0；证据目录 `artifacts/verification/TASK-008/verify/2026-10-29T08-32-54-678Z` |
 | 未通过 / 阻塞 | 无 |
 | 验收结论 | **DONE · PASS** |
 
@@ -156,25 +162,26 @@ TASK-001/002/003 的认证、会话轮换、Cookie、Origin、限流、日志脱
 
 | 验收项 | 证据 | 结果 |
 |---|---|---|
-| AC-01 数据库与迁移 | 迁移 `20261028070751_add_postcards` 在测试库 `migrate deploy` 成功；检查约束含正文/参与者/时间顺序；集成测试验证 2000/2001 字符与非法发送 | PASS |
-| AC-02 草稿 | 创建/读取/修改/删除、跨用户 404、2001 字/全空白 422、已发送草稿 404 与列表排除 | PASS |
-| AC-03 发送与距离 | 同城 `deliverAt - sentAt = 720 分钟`；城市快照与发送后改城市不变；重复草稿/幂等键只一封；缺城市/自我/非白名单/RESTING 拒绝；第 11 张 429 | PASS |
-| AC-04 在途保密 | 收件人 summary/inbox/transit 无正文，详情 404 `RESOURCE_NOT_ACCESSIBLE`；寄件人可读；响应无 email；390px 写信页 | PASS |
-| AC-05 到期投递 | 到期前 0；两次扫描只 1 次；`deliveredAt` 不被第二次覆盖；并发扫描合计 1 次；收件箱恰好一封 | PASS |
-| AC-06 邮局页面 | Playwright：草稿保存刷新仍在 → 寄出 → 在途 → 收件人提前 404 → 真实 Worker 送达 → 打开正文；移动端与未登录回跳 | PASS |
-| AC-07 回归与安全 | 认证、会话轮换、Cookie、Origin、限流、日志脱敏、城市/资料测试全部通过；架构检查通过 | PASS |
-| AC-08 质量门禁 | `pnpm verify` 9/9 PASS（exit 0）；临时跳过接信状态校验后 exit 1，integration FAIL；恢复后重新 PASS | PASS |
+| AC-01 草稿绑定 | 集成：参与者创建带 `passageId` 草稿返回 201、`passageId` 回显、`recipient` 为对方；非参与者 404 且草稿数 0；`recipientId` 指向第三人 422 且不落库；已绑定草稿改收件人为第三人 422 | PASS |
+| AC-02 共途收件人 | 集成：双方 ALLOW 时只返回对方且无 email/坐标；对方停泊后返回 `[]`；非参与者 404；契约断言查询参数存在 | PASS |
+| AC-03 发送许可 | 集成：正常发送 201、`postcards.passage_id` 与收件人正确、`deliverAt >= sentAt`、草稿标记已使用；停泊后 409 `PASSAGE_STATE_CONFLICT`、`postcards` 计数 0、草稿 `sentPostcardId` 仍为空 | PASS |
+| AC-04 兼容与不回退 | 集成：TASK-004 的 12 条邮局用例全部通过（TASK-008 后共 80 条）；无 `passageId` 的草稿仍走白名单，幂等、日限、在途保密与 Worker 单次投递未改 | PASS |
+| AC-05 接信状态独立 | 集成：对方 `RESTING` 时返回 422，`postcards` 计数 0；共途许可未绕过接信状态 | PASS |
+| AC-06 Web | E2E：续程后共途详情出现「写一张明信片」→ 写信页显示「这段共途 · 海边的冬天」→ 返回共途；停泊与完成后入口消失；390px 与键盘断言保持 | PASS |
+| AC-07 数据库 | 8 次迁移（TASK-007 的 7 次 + 新增 1 次）；测试库 `migrate deploy` 重放、`migrate status` 已最新；新增列可空，既有行不受影响；外键与索引存在 | PASS |
+| AC-08 回归与安全 | 集成 80、E2E 20、Smoke 17 全部通过；TASK-001～007 的认证、会话、Origin、限流、日志脱敏、故事、地图、共途状态未回退；响应无 email/坐标 | PASS |
+| AC-09 质量门禁 | `pnpm verify` 9/9 PASS、exit 0；故障注入后 lint/integration/smoke 判 FAIL、总命令 exit 1，恢复后重新 PASS | PASS |
 
 补充说明：
 
-- 红灯证据：实现前新增集成测试 9 条因接口 404 失败，日志 `artifacts/verification/TASK-004/red/red-postcards-api.log`。
-- 故意失败证明：`artifacts/verification/TASK-004/red/verify-failure-proof.log`；最终日志 `artifacts/verification/TASK-004/final-verify.log`。
-- 收件人使用 `POSTCARD_DEMO_RECIPIENT_EMAILS` 白名单；E2E 使用固定虚构邮箱，启动前清空测试库。
-- E2E 首轮失败根因：演示邮箱在 Playwright 配置的多个进程中按时间戳生成，注册邮箱与 API 白名单不一致；改为固定虚构邮箱后通过。第二轮失败根因：`getByText('正在路上')` 同时匹配导航描述，改为 `.letter-meta .status-pill` 精确定位后通过。两次失败日志均保留在 `artifacts/verification/TASK-004/e2e-*-run.log`。
-- 每日上限默认 10 张/滚动 24 小时，配置 `POSTCARD_MAX_SENDS_PER_DAY`；第 11 张 429，失败不消耗草稿。
-- Worker 独立进程 `pnpm --filter @somewhere/api worker`；测试/运维单次扫描 `pnpm --filter @somewhere/api delivery:run-once`。
-- `RESTRICTED` 只有枚举与读取拒绝，没有审核写入路径；通知、回信、共途/信友来源均未实现。
+- 红灯证据：实现前 `postcard-passage-binding.spec.ts` 因模块不存在失败（`artifacts/verification/TASK-008/red/red-postcard-passage-unit.log`）；集成新增 8 条中 7 条失败、既有 73 条通过（`red/red-postcard-passage-api.log`）。
+- 测试契约同步：`postcards.spec.ts` 中草稿响应键集合加入 `passageId`，这是 TASK-008 的显式契约变化；原有正文、权限、幂等断言未删除。
+- 失败证明：把 `PassageReader.canSend` 临时改为 `true` 后，lint（未使用导入）、integration（停泊仍可发送）与 Smoke（期望 409）判 FAIL，`pnpm verify` exit 1（`red/verify-failure-proof.log`）；E2E 未捕获该注入，因为详情页入口使用 `PassageService` 的展示许可，而发送使用 `PassageReader`，两条路径由集成测试分别覆盖。恢复后重新 PASS。
+- 迁移漂移检查：`prisma migrate status` 显示 8 次迁移且已最新；`prisma migrate diff` 仍只报告 TASK-005 遗留的 `stories(review_status, published_at, id)` 索引未写入 schema，本次新增列无漂移。
+- 仍未实现：共途邀请与创建入口、回信、信友、纪念册、通知、举报/封锁、`RESTRICT` 处置、成员级归档。
 
 ## 9. 下一步
 
-等待用户批准下一个业务任务；不自动进入城市故事、共途或纪念册。
+完成 TASK-008 后，建议下一任务为双向信友（`PenpalModule`）；在开放邀请或陌生人触达前必须先实现 SafetyModule 的封锁能力。不自动进入下一任务。
+
+角色与权限扩展（`MODERATOR`、`ADMIN` 用户/角色管理、`CURATOR`）是后续独立任务，不改变上述顺序；规划见 `specs/15-roles-and-permissions.md`。其中 `ADMIN` 不允许查看其他用户的邮箱，也不允许读取私人信件或私人记忆。当前代码仍为 `USER | ADMIN`，未实现角色扩展。

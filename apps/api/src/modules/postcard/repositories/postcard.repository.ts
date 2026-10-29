@@ -8,6 +8,7 @@ export interface SendFromDraftInput {
   ownerId: string;
   body: string;
   receiverId: string;
+  passageId: string | null;
   originCityId: string;
   destinationCityId: string;
   sentAt: Date;
@@ -115,6 +116,7 @@ export class PostcardRepository {
           data: {
             senderId: input.ownerId,
             receiverId: input.receiverId,
+            passageId: input.passageId,
             body: input.body,
             originCityId: input.originCityId,
             destinationCityId: input.destinationCityId,

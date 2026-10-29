@@ -18,6 +18,10 @@ export class CityService {
     return this.cities.findById(id);
   }
 
+  async findManyByIds(ids: string[]): Promise<City[]> {
+    return this.cities.findManyByIds(ids);
+  }
+
   toSummary(city: City): CitySummary {
     return { id: city.id, name: city.name, countryCode: city.countryCode };
   }

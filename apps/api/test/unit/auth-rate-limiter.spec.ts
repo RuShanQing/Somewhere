@@ -21,6 +21,9 @@ function buildConfig(max: number, windowMs: number): AppConfig {
     postcardDemoRecipientEmails: [],
     postcardMaxSendsPerDay: 10,
     deliveryPollIntervalMs: 60_000,
+    storyMaxActivePerCity: 50,
+    storyMaxSubmissionsPerWindow: 3,
+    storySubmissionWindowDays: 7,
   };
 }
 

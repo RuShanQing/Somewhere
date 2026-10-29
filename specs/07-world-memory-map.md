@@ -3,6 +3,8 @@
 **优先级：P0** · 主导航：发现 · 归属：DiscoveryModule + StoryModule
 
 > **明确边界**：本文不选择二维/三维实现形式、地图引擎、渲染库、图层或动画技术。
+>
+> **实现状态（TASK-006）**：业务入口已实现——`/discover/map` 城市入口页、`/discover/map/:cityId` 城市故事页、`GET /api/v1/discovery/cities` 聚合接口。当前呈现形式是**城市入口网格**，不包含任何地图渲染；渲染技术仍按 MAP-06 保持未定。
 
 ## MAP-01 目标
 
@@ -10,30 +12,32 @@
 
 ## MAP-02 交互语义
 
-1. 打开发现 → 进入世界记忆地图入口。
-2. 浏览有公开故事的城市；没有公开内容的城市应呈现真实空态。
-3. 选择城市 → 看到该城市当前活跃且审核通过的故事列表。
-4. 点击故事 → 进入同一个 `/stories/:id` 详情。
-5. 用户可按主题或时间过滤，也可回到城市故事站查看同一故事。
+1. 发现页同时提供两个入口：城市故事站（`/discover`）与世界记忆地图（`/discover/map`）。**不改变故事站作为 `/discover` 默认页**，避免同一内容出现两套路由。
+2. 浏览有公开故事的城市；查询不到公开内容的城市不进入入口列表，单城市页呈现真实空态。
+3. 选择城市 → `/discover/map/:cityId` 看到该城市当前活跃且审核通过的故事列表。
+4. 点击故事 → 进入同一个 `/discover/stories/:id` 详情。
+5. 用户可按主题过滤，也可用游标按发布时间继续阅读，并随时回到城市故事站查看同一故事。
 
 地图与故事站是**两个入口、一个公共内容库**，不能新增第二套可见性或审核规则。
 
 ## MAP-03 必须遵循的数据契约
 
-- `GET /api/v1/cities?hasPublicStories=true` → 只返回拥有活跃公开故事的城市。
-- `GET /api/v1/cities/:id/stories?cursor=&topic=` → 从 StoryModule 的 `ApprovedStoryReader` 返回数据。
-- 详情链接统一 `/stories/:id`。
-- 城市入口显示粗粒度城市地点；绝不推导作者实时位置、住址或邮件轨迹。
+- `GET /api/v1/discovery/cities?topic=` → 只返回拥有活跃公开故事的城市，附 `publicStoryCount` 与 `latestPublishedAt`；按 `latestPublishedAt DESC, cityId ASC` 排序，**不按故事数量排序**。
+- `GET /api/v1/stories?cityId=&topic=&cursor=&limit=` → 城市故事列表。这是 `ApprovedStoryReader` 的既有公开读取入口，地图入口**不新增别名端点**，避免第二套查询或可见性规则。
+- `GET /api/v1/stories/:id` → 公开详情；页面路由统一 `/discover/stories/:id`。
+- 城市入口显示粗粒度城市地点（城市名 + 国家代码）；绝不推导作者实时位置、住址或邮件轨迹，也不返回城市中心点坐标。
 
 所有公共返回必须满足 Story 的公开谓词：
-`reviewStatus=APPROVED && publishedAt!=null && archivedAt==null`，且仍有有效发布授权。
+`reviewStatus=APPROVED && publishedAt!=null && archivedAt==null && publicConsentAt!=null`。
+该谓词在代码中只有一处定义（`story/domain/story-visibility.ts`），聚合、列表、详情与容量提升共用。
 
 ## MAP-04 异常与边界
 
 - 城市故事为空 → 温和空态，不能用未经授权的样例内容填充。
-- 未审核、撤回、下架故事 → 不可在地图城市入口出现。
-- 作者把个人资料的城市设为隐藏时，故事级单独授权仍可展示**故事发生的城市**，但不得反推或展示作者真实居住地。
-- 某城内容数量、筛选排序必须和故事站当前可公开的内容保持一致。
+- 未审核、撤回、下架故事 → 不可在地图城市入口出现；审核通过但排队（`publishedAt=null`）同样不计入，否则会出现“城市有计数、进去却空”的错误状态。
+- 作者把个人资料的城市设为隐藏时，故事级单独授权仍可展示**故事发生的城市**，但不得反推或展示作者真实居住地（该开关仍未实现，见 `14-story-deferred-scope.md`）。
+- 某城内容数量、筛选排序必须和故事站当前可公开的内容保持一致；`publicStoryCount` 表示该城活跃公开故事总数，不表示当前页已加载条数。
+- 未知或不存在的 `cityId`：接口保持既有行为（返回空列表），页面呈现温和空态并引导回地图入口，不伪造故事、不抛错。
 
 ## MAP-05 验收（只验业务，不验地图具体实现）
 

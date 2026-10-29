@@ -1,6 +1,6 @@
 # Somewhere · 测试与独立验收规则
 
-> 当前状态：**测试策略与脚本命令契约 + TASK-001/TASK-002/TASK-003 已落地的可运行基线**。第 1–9 节是长期约束；第 11 节记录认证、城市与资料任务实际实现的命令与实测结果。除第 11 节列出的已验证能力外，不得据此声称其他业务测试已经通过。
+> 当前状态：**测试策略与脚本命令契约 + TASK-001～TASK-008 已落地的可运行基线**。第 1–9 节是长期约束；第 11 节记录认证、城市与资料、邮局、城市故事、世界记忆地图、共途与共途发信任务实际实现的命令与实测结果。除第 11 节列出的已验证能力外，不得据此声称其他业务测试已经通过。
 
 ## 1. 测试的目标
 
@@ -50,6 +50,7 @@ TDD 的 `RED → GREEN → REFACTOR` 用于写新功能；旁路回归是额外�
 | 代码改动 | 最低必需测试 | 受影响的旁路回归 |
 |---|---|---|
 | 认证 / 会话 | 单元 + API 集成 + E2E | 注册→登录→刷新页面→退出 |
+| 角色 / 后台权限 | 单元 + API 集成 + 契约 + E2E | 匿名/普通用户/审核员/管理员边界；角色变更即时生效；后台不泄露邮箱与私人内容 |
 | 城市 / 距离 / 延迟投递 | 单元 + DB 集成 + E2E | 在途不可开信、到时送达、只送一次 |
 | 公开故事 / 发现 | API 集成 + E2E | 待审核不可见、通过后故事站及地图同时可见 |
 | 共途 / 信友 / 停泊 | 单元 + DB 集成 + E2E | 停泊阻止新的通信行为；已有记忆仍可读 |
@@ -186,7 +187,7 @@ Notes: ...
 
 新增业务功能时，重复运行上述稳定基线，并逐步将 SMOKE-03～05 提升为默认门禁。旧功能不能因“新版 AI 更擅长”而减少验证。
 
-## 11. TASK-001～TASK-004 落地状态（2026-10-28 实测）
+## 11. TASK-001～TASK-008 落地状态（2026-10-29 实测）
 
 命令契约已全部实现，且 `pnpm verify` 会串行执行下列门禁并对任一失败返回非 0。证据目录会读取 `tasks/current.md` 中的任务编号，自动写入 `artifacts/verification/<TASK-ID>/`。
 
@@ -196,12 +197,12 @@ Notes: ...
 | `pnpm lint` | 根 `eslint.config.mjs`（TS + Vue + 测试） | PASS |
 | `pnpm typecheck` | `apps/api` tsc、`apps/web` vue-tsc、`packages/api-client` tsc | PASS |
 | `pnpm build` | Nest（tsc，保留装饰器元数据）+ Vite 构建 | PASS |
-| `pnpm test:unit` | 后端 10 文件 / 57 用例；Web 5 文件 / 30 用例（Vitest + SWC） | PASS |
-| `pnpm test:integration` | 4 文件 / 35 用例，NestJS HTTP + 真实 `somewhere_test` 数据库，跑前 `prisma migrate deploy` 与城市种子 | PASS |
-| `pnpm test:contract` | 导出 OpenAPI → `openapi-typescript` → 与提交的 `packages/api-client/src/generated.ts` 比对；覆盖 15 条路径，断言摘要无正文、收件人无邮箱/坐标 | PASS |
+| `pnpm test:unit` | 后端 15 文件 / 92 用例；Web 8 文件 / 48 用例（Vitest + SWC） | PASS |
+| `pnpm test:integration` | 8 文件 / 80 用例，NestJS HTTP + 真实 `somewhere_test` 数据库，跑前 `prisma migrate deploy` 与城市种子 | PASS |
+| `pnpm test:contract` | 导出 OpenAPI → `openapi-typescript` → 与提交的 `packages/api-client/src/generated.ts` 比对；覆盖 30 条路径，断言故事公开、地图聚合与共途契约无邮箱/作者 ID/坐标/接信状态 | PASS |
 | `pnpm test:architecture` | `tests/architecture/check-boundaries.mjs`：跨层/跨模块导入、Prisma 访问边界、浏览器存储禁令；只允许公开 Module/Guard/Service | PASS |
-| `pnpm test:e2e` | Playwright 15 用例，真实 API + PostgreSQL + Vite + Chrome；含邮局寄出/在途保密/Worker 送达 | PASS |
-| `pnpm test:smoke` | 构建产物 + 真实 HTTP 14 项检查（含邮局闭环与 Worker 只投递一次） | PASS |
+| `pnpm test:e2e` | Playwright 20 用例，真实 API + PostgreSQL + Vite + Chrome；含故事草稿/审核/公开/撤回、地图城市入口、邮局闭环与共途停泊/续程/完成/归档 | PASS |
+| `pnpm test:smoke` | 构建产物 + 真实 HTTP 17 项检查（含故事闭环、地图与故事站同源、邮局闭环与 Worker 只投递一次、共途状态） | PASS |
 | `pnpm verify` | 串行聚合 9 个子门禁，日志写入 `artifacts/verification/<TASK-ID>/verify/<时间戳>/` | PASS（exit 0） |
 
 测试隔离与安全：
@@ -213,7 +214,7 @@ Notes: ...
 
 TASK-002 增补（AUTH 收敛）：
 
-- 注册/登录成功响应只返回 `{ id, nickname, cityId?, emailVerified }`；`/auth/me` 是唯一返回本人 email 的认证接口。
+- 注册/登录成功响应只返回 `{ id, nickname, cityId?, emailVerified, role }`（`role` 由 TASK-005 增加）；`/auth/me` 是唯一返回本人 email 的认证接口。
 - 登录采用单活动会话：新会话生效后，该用户其他活动会话立即撤销；集成、E2E、Smoke 与契约检查均覆盖。
 - 红灯证据：先改测试后运行，注册/登录响应仍含 email 时 2 条集成用例失败（`artifacts/verification/TASK-002/red/red-auth-contract.log`）。
 - 聚合门禁有效性证明：临时把登录退化回 `issue` 后，`pnpm verify` 返回 exit 1，integration/E2E/Smoke 判 FAIL（`artifacts/verification/TASK-002/red/verify-failure-proof.log`），恢复后重新 PASS。
@@ -237,6 +238,49 @@ TASK-004 增补（邮局与距离延迟投递）：
 - 聚合门禁有效性证明：临时跳过收件人接信状态校验后 `pnpm verify` 返回 exit 1，integration 判 FAIL（`artifacts/verification/TASK-004/red/verify-failure-proof.log`），恢复后重新 PASS。
 - 测试专用时间推进脚本 `apps/api/scripts/test-advance-postcard.mjs` 只允许本机测试库，更新 `deliver_at` 后调用真实 Worker；不修改生产延迟公式，也不开放隐藏 HTTP 接口。
 
+TASK-005 增补（城市故事与最小审核）：
+
+- 单元测试覆盖标题 1/80/81、正文 19/20/3000/3001 与全空白、emoji 码点、标签 3/4 与去重、状态转移、公开条件、城市容量、游标编解码。
+- 集成测试覆盖：作者草稿/编辑/提交/撤回/删除、跨用户 404、公开列表对 PENDING/REJECTED/REMOVED 不可见、管理员通过/驳回/下架、普通用户 403、匿名 401、管理员自审 403 且不写审计、并发审核只成功一次、城市 50 条容量排队与释放提升、7 天第 4 次提交 429、城市/主题筛选与游标分页、公开响应无 email/坐标/作者 ID、注册不可写入 `role`、`/auth/me` 返回角色。
+- E2E 覆盖：作者草稿→刷新→提交→匿名不可见；管理员 `/admin/moderation` 通过→公开列表与详情同一 Story ID；作者撤回→公开入口消失；普通用户进入 `/forbidden`；390px 写作页无横向溢出。
+- Smoke 在构建产物上验证同一故事闭环，并断言普通用户审核队列 403、公开响应无邮箱/坐标。
+- 红灯证据：实现前新增集成测试 10 条因接口 404 失败（`artifacts/verification/TASK-005/red/red-stories-api.log`）。
+- 聚合门禁有效性证明：临时移除 `RolesGuard` 的 403 后 `pnpm verify` 返回 exit 1，integration/Smoke 判 FAIL（`artifacts/verification/TASK-005/red/verify-failure-proof.log`），恢复后重新 PASS。
+- 管理员授予使用 `apps/api/scripts/grant-admin.mjs`（`pnpm --filter @somewhere/api admin:grant --email=<虚构账号>`），拒绝生产环境；E2E/Smoke 通过该脚本而不是隐藏 HTTP 接口授予角色。
+
+TASK-006 增补（世界记忆地图业务入口）：
+
+- 单元测试锁定公开谓词 `PUBLIC_STORY_CONDITION` 的四个字段与取值，防止后续为“让地图显示更多”而放宽条件；Web 新增 `usePublicFeed` 测试（分页追加、过期响应丢弃、错误不清空为用户可见空态）。
+- 集成测试（`discovery.spec.ts`，11 条）覆盖：匿名 200 与空库空数组；`topic` 去空格与 25 字符 422；草稿/待审/驳回/撤回都不产生城市；聚合计数与 `/stories?cityId=` 返回同一 Story ID 集合；审核通过但排队（`publishedAt=null`）的故事不计入且城市数量仍为 50；撤回后城市消失、重新公开后恢复；管理员下架后城市消失；响应无 email/坐标/作者 ID 且字段白名单固定；城市按最近公开时间倒序而非数量；主题筛选与故事站一致；未知城市故事列表为空而不是 404。
+- 契约测试新增 `/api/v1/discovery/cities`（24 条路径），断言 `CityMemoryItemDto` / `DiscoveryCityDto` 含公开数量与最近公开时间且不含坐标、作者 ID、email。
+- E2E `map.spec.ts`：待审核时地图不出现城市 → 管理员通过 → 匿名看到城市与「1 篇可读故事」→ 键盘可聚焦 → 单城市页 → 390px 无横向溢出 → 地图与故事站链接指向同一 `/discover/stories/:id` → 作者撤回后两个入口同时消失。
+- Smoke 启用 SMOKE-04 的世界记忆地图部分：待审故事的城市不出现、通过后地图计数与故事站条数一致、响应无邮箱/坐标/作者 ID、撤回后城市消失。
+- 红灯证据：实现前新增集成测试 10 条因 `/api/v1/discovery/cities` 404 失败（`artifacts/verification/TASK-006/red/red-discovery-api.log`），1 条既有基线用例通过。
+- 聚合门禁有效性证明：临时在聚合查询里写第二套可见性条件（去掉“已发布”与“公开授权”）后，`pnpm verify` 在 `test:integration` 判 FAIL 并返回 exit 1（`artifacts/verification/TASK-006/red/verify-failure-proof.log`），恢复后重新 PASS。
+
+TASK-007 增补（共途状态与参与者许可）：
+
+- 单元测试覆盖 `passage-state`：`ACTIVE→COMPLETED`、`ACTIVE/COMPLETED→ARCHIVED` 合法，`ARCHIVED` 终态、`COMPLETED→ACTIVE` 与已完成续程非法、同动作幂等；`passage-policy`：仅「查看者是参与者、恰好两人、进度 ACTIVE、双方 ALLOW」时 `canSend=true`，任一方 `PAUSED/CLOSED` 或进度非 ACTIVE 均为 false；参与者必须为两名不同用户。
+- 集成测试（`passages.spec.ts`）：匿名 401、非参与者列表不含且详情 404、`ADMIN` 非参与者同样 404；字段白名单无 email / `receptionMode` / 坐标；A 停泊后 B 不能替 A 续程、双方 `canSend=false`；A 续程恢复；完成不改双方 `consentState`；重复动作幂等不重复写事件；完成后续程 409；归档后 `ACTIVE` 列表消失、`ARCHIVED` 可见、详情仍 200；`CLOSED` 参与者不能续程；并发停泊只产生一条事件；非法 `status` 422。
+- 契约测试新增 6 条路径（24 → 30），断言 `PassageSummaryDto` 含 `progressStatus/me/counterpart/permissions`，且不含 email、坐标、`receptionMode`、会话字段。
+- E2E `passages.spec.ts`：seed 两人共途 → A 停泊并刷新保持 → B 看到对方停泊且无法替其续程 → A 续程 → 完成 → 归档 → 进行中消失、已归档可读 → 390px 无横向溢出。
+- Smoke 新增共途检查：匿名 401、停泊后 `canSend=false`、归档后进行中列表为空、响应无邮箱 / 坐标。
+- 实测：后端单元 14 文件 / 89 用例、Web 单元 8 文件 / 47 用例、集成 7 文件 / 72 用例、契约 30 条路径、Playwright 20 用例、Smoke 17 项全部通过；`pnpm verify` 9/9 PASS、exit 0。
+- 红灯证据：实现前单元 2 个套件因模块不存在失败、既有 70 条通过（`artifacts/verification/TASK-007/red/red-passage-unit.log`）；集成 11 条因表与接口缺失失败、既有 61 条通过（`red/red-passage-api.log`）。
+- 聚合门禁有效性证明：临时让 `canSendPassage` 无条件返回 true 后，`pnpm verify` 在 unit、integration、E2E、Smoke 四处判 FAIL 并返回 exit 1（`red/verify-failure-proof.log`），恢复后重新 PASS。
+- 并发覆盖：重复停泊与同人并发停泊均只写 1 条 `PAUSED` 事件；完成与归档并发时终态落在 `COMPLETED` 或 `ARCHIVED`，归档事件不超过 1 条。
+- 测试夹具通过原始 SQL 写入三张表，不调用 `PassageService` 的辅助方法替代断言；生产代码没有 HTTP 创建入口。
+
+TASK-008 增补（共途通信许可接入邮局）：
+
+- 实测：后端单元 15 文件 / 92 用例、Web 单元 8 文件 / 48 用例、集成 8 文件 / 80 用例、契约 30 条路径、Playwright 20 用例、Smoke 17 项全部通过；`pnpm verify` 9/9 PASS、exit 0（`artifacts/verification/TASK-008/verify/2026-10-29T08-32-54-678Z`）。
+- 集成新增 8 条：参与者绑定草稿、非参与者 404、第三人 422、共途收件人列表与停泊后空数组、正常发送写入 `passage_id`、停泊后 409 且不落库、`RESTING` 仍 422、已绑定草稿不可改收件人。
+- 契约：`PostcardDraftResponseDto` 与 `CreatePostcardDraftDto` 断言 `passageId`，`/postcards/recipients` 断言可选 `passageId` 查询参数；TASK-005 的草稿响应键集合测试同步加入 `passageId`（显式契约变化，未删除旧断言）。
+- E2E：扩展既有共途用例，验证续程后出现「写一张明信片」、写信页显示共途主题、返回共途、停泊与完成后入口消失。
+- Smoke：原有共途检查加入「停泊后创建绑定草稿并发送返回 409 `PASSAGE_STATE_CONFLICT`」。
+- 红灯证据：单元因模块不存在失败（`red/red-postcard-passage-unit.log`）；集成新增 8 条中 7 条失败、既有 73 条通过（`red/red-postcard-passage-api.log`）。
+- 聚合门禁有效性证明：把 `PassageReader.canSend` 临时改为 `true` 后，lint、integration 与 Smoke 判 FAIL、`pnpm verify` exit 1（`red/verify-failure-proof.log`）。E2E 未捕获该注入，因为详情页入口使用 `PassageService` 的展示许可；两条路径分别由集成测试覆盖。恢复后重新 PASS。
+
 证据目录：
 
 - 最终全量：`artifacts/verification/<TASK-ID>/final-verify.log`
@@ -246,5 +290,66 @@ TASK-004 增补（邮局与距离延迟投递）：
 - TASK-002 最终证据：`artifacts/verification/TASK-002/verify/2026-10-28T05-26-29-901Z/`、`artifacts/verification/TASK-002/final-verify.log`
 - TASK-003 最终证据：`artifacts/verification/TASK-003/verify/2026-10-28T06-29-17-323Z/`、`artifacts/verification/TASK-003/final-verify.log`
 - TASK-004 最终证据：`artifacts/verification/TASK-004/verify/2026-10-28T08-25-27-878Z/`、`artifacts/verification/TASK-004/final-verify.log`
+- TASK-005 最终证据：`artifacts/verification/TASK-005/verify/2026-10-29T06-15-10-298Z/`、`artifacts/verification/TASK-005/final-verify.log`
+- TASK-006 最终证据：`artifacts/verification/TASK-006/verify/2026-10-29T07-04-34-277Z/`、`artifacts/verification/TASK-006/final-verify.log`
+- TASK-007 最终证据：`artifacts/verification/TASK-007/verify/2026-10-29T08-08-19-988Z/`、`artifacts/verification/TASK-007/final-verify.log`
+- TASK-008 最终证据：`artifacts/verification/TASK-008/verify/2026-10-29T08-32-54-678Z/`、`artifacts/verification/TASK-008/final-verify.log`
 
-尚未启用：SMOKE-04～05（故事/地图、关系与记忆权限）要等对应业务任务实现后再纳入门禁；通知、审核处置与 CI 流水线同样未实现。E2E 目前使用本机 Chrome（`channel: chrome`），CI 需改为 `pnpm exec playwright install chromium` 或提供等效浏览器。
+尚未启用：SMOKE-05（关系与记忆权限）中的共途停泊 / 归档与共途发信许可已由 TASK-007 / TASK-008 的 E2E 与 Smoke 覆盖，但完整 SMOKE-05 仍需信友、纪念册与封锁实现后再纳入门禁；SMOKE-04 的故事站与地图两部分已由 TASK-005 / TASK-006 启用。举报、封锁、通知与 CI 流水线同样未实现。E2E 目前使用本机 Chrome（`channel: chrome`），CI 需改为 `pnpm exec playwright install chromium` 或提供等效浏览器。
+
+## 12. 角色与权限测试计划（规划，未执行）
+
+> 对应规范：`specs/15-roles-and-permissions.md`。当前代码仍为 `USER | ADMIN`；以下命令与用例尚未运行，不得写成已通过。
+
+### 12.1 单元
+
+- 角色蕴含矩阵：`USER`、`MODERATOR`、`CURATOR`、`ADMIN` 分别满足/不满足哪些 `@Roles`。
+- `RolesGuard`：无用户 401；角色不足 403；`ADMIN` 满足 `MODERATOR`/`CURATOR`；`MODERATOR` 不满足 `CURATOR`/`ADMIN`。
+- 角色变更规则：不能授予 `GUEST`、未知角色或空角色；不能降级最后一个 `ADMIN`；不能修改自己的角色；重复设置幂等。
+- `GUEST` 不进入数据库角色枚举，不创建用户行。
+
+### 12.2 集成
+
+- 匿名访问 `/moderation/queue`、`/admin/users`、`/admin/role-changes` 全部 401。
+- `USER` 访问审核/管理接口 403。
+- `MODERATOR` 访问审核队列 200；访问 `/admin/users`、`/admin/role-changes` 403。
+- `ADMIN` 访问审核与管理接口 200。
+- `MODERATOR` 审核自己的故事 403，且 `story_review_actions` 不新增记录。
+- `ADMIN` 修改用户角色成功；目标用户下一次请求获得新角色；`role_changes` 新增一条审计。
+- 不能授予 `GUEST`；不能降级最后一个 `ADMIN`；不能修改自己的角色。
+- 后台用户列表响应只含 `id/nickname/role/createdAt`，不含 email、掩码邮箱、邮箱域名或邮箱哈希。
+- `ADMIN` / `MODERATOR` 访问他人明信片详情 404；未来访问他人个人记忆同样 404。
+- 注册请求携带 `role` 仍被拒绝（422），不产生特权账号。
+
+### 12.3 契约
+
+- `UserRole` 枚举扩展后，登录/注册/`/auth/me` 的 `role` 字段仍存在且类型正确。
+- `/admin/users`、`/admin/role-changes` 的响应字段白名单不含 email。
+- 审核接口的 401/403/200 响应约定不泄露角色内部原因。
+
+### 12.4 E2E
+
+- `ADMIN` 在 `/admin/users` 按昵称或 ID 找到账号并授予 `MODERATOR`；页面不显示 email。
+- `MODERATOR` 登录后能进入审核台并通过一条待审故事；看不到用户管理入口。
+- 普通用户进入审核台被拒绝。
+- `ADMIN` 查看角色变更审计；审计中没有 email。
+- 角色变更后刷新页面/下一次请求即生效。
+
+### 12.5 门禁
+
+未来角色任务至少运行：
+
+```text
+pnpm lint
+pnpm typecheck
+pnpm build
+pnpm test:unit
+pnpm test:integration
+pnpm test:contract
+pnpm test:architecture
+pnpm test:e2e
+pnpm test:smoke
+pnpm verify
+```
+
+当前状态：**NOT RUN**。本文件只记录规划，不代表角色功能已实现或测试已通过。

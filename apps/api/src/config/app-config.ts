@@ -25,6 +25,12 @@ export interface AppConfig {
   postcardMaxSendsPerDay: number;
   /** 独立 Worker 扫描到期明信片的间隔。 */
   deliveryPollIntervalMs: number;
+  /** 每个城市同时公开的故事上限；通过审核但超出的故事排队等待。 */
+  storyMaxActivePerCity: number;
+  /** 每个账号在滚动窗口内最多提交的故事数量。 */
+  storyMaxSubmissionsPerWindow: number;
+  /** 故事提交配额的滚动窗口天数。 */
+  storySubmissionWindowDays: number;
 }
 
 export const APP_CONFIG = Symbol('APP_CONFIG');
@@ -119,5 +125,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     postcardDemoRecipientEmails: readList(env, 'POSTCARD_DEMO_RECIPIENT_EMAILS'),
     postcardMaxSendsPerDay: readInteger(env, 'POSTCARD_MAX_SENDS_PER_DAY', 10),
     deliveryPollIntervalMs: readInteger(env, 'DELIVERY_POLL_INTERVAL_MS', 60_000),
+    storyMaxActivePerCity: readInteger(env, 'STORY_MAX_ACTIVE_PER_CITY', 50),
+    storyMaxSubmissionsPerWindow: readInteger(env, 'STORY_MAX_SUBMISSIONS_PER_WINDOW', 3),
+    storySubmissionWindowDays: readInteger(env, 'STORY_SUBMISSION_WINDOW_DAYS', 7),
   };
 }

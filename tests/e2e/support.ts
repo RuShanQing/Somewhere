@@ -68,6 +68,64 @@ export async function chooseFirstCityAndSave(page: Page): Promise<string> {
   return cityId;
 }
 
+/** 测试专用：通过受控脚本把虚构账号提升为 ADMIN，不通过隐藏 HTTP 接口。 */
+export function grantAdmin(email: string): void {
+  const apiRoot = resolve(__dirname, '../../apps/api');
+  const testDatabaseUrl = process.env.E2E_TEST_DATABASE_URL;
+  if (!testDatabaseUrl) {
+    throw new Error('E2E 缺少 E2E_TEST_DATABASE_URL');
+  }
+  execFileSync('node', ['scripts/grant-admin.mjs', '--email', email], {
+    cwd: apiRoot,
+    env: {
+      ...process.env,
+      NODE_ENV: 'test',
+      DATABASE_URL: testDatabaseUrl,
+      TEST_DATABASE_URL: testDatabaseUrl,
+    },
+    stdio: 'pipe',
+  });
+}
+
+/**
+ * 测试专用：通过受控脚本建立两人共途。
+ * 产品没有邀请 / 创建接口，因此 E2E 只能用非生产脚本准备数据，
+ * 不通过隐藏 HTTP 入口替用户表达同意。
+ */
+export function seedPassageForEmails(options: {
+  emailA: string;
+  emailB: string;
+  topic: string;
+}): void {
+  const apiRoot = resolve(__dirname, '../../apps/api');
+  const testDatabaseUrl = process.env.E2E_TEST_DATABASE_URL;
+  if (!testDatabaseUrl) {
+    throw new Error('E2E 缺少 E2E_TEST_DATABASE_URL');
+  }
+  execFileSync(
+    'node',
+    [
+      'scripts/seed-passage.mjs',
+      '--email-a',
+      options.emailA,
+      '--email-b',
+      options.emailB,
+      '--topic',
+      options.topic,
+    ],
+    {
+      cwd: apiRoot,
+      env: {
+        ...process.env,
+        NODE_ENV: 'test',
+        DATABASE_URL: testDatabaseUrl,
+        TEST_DATABASE_URL: testDatabaseUrl,
+      },
+      stdio: 'pipe',
+    },
+  );
+}
+
 /**
  * 测试专用时间推进：只允许测试库，把指定明信片设为到期并运行真实 Worker。
  * 不开放任何生产 HTTP 接口，也不修改延迟公式。

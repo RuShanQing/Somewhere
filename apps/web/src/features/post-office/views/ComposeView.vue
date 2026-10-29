@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import {
   api,
   ApiError,
+  type PassageSummary,
   type PostcardRecipient,
 } from '../../../shared/api/client';
 import { toFriendlyAuthMessage } from '../../../shared/api/error-message';
@@ -19,6 +20,7 @@ const draftId = ref<string | null>(
   typeof route.params.id === 'string' ? route.params.id : null,
 );
 const recipients = ref<PostcardRecipient[]>([]);
+const passage = ref<PassageSummary | null>(null);
 const draftRecipientName = ref<string | null>(null);
 const recipientId = ref('');
 const body = ref('');
@@ -62,13 +64,27 @@ function friendlyError(error: unknown): string {
 async function loadCompose(): Promise<void> {
   isLoading.value = true;
   loadError.value = null;
+  const queryPassageId =
+    typeof route.query.passageId === 'string' ? route.query.passageId : null;
+  let boundPassageId: string | null = queryPassageId;
+
   try {
-    recipients.value = await api.postcardRecipients();
     if (draftId.value) {
       const draft = await api.postcardDraft(draftId.value);
       body.value = draft.body;
       recipientId.value = draft.recipient?.id ?? '';
       draftRecipientName.value = draft.recipient?.nickname ?? null;
+      boundPassageId = draft.passageId ?? boundPassageId;
+    }
+
+    if (boundPassageId) {
+      passage.value = await api.passageDetail(boundPassageId);
+      recipients.value = await api.postcardRecipients(boundPassageId);
+      if (!draftId.value) {
+        recipientId.value = recipients.value[0]?.id ?? '';
+      }
+    } else {
+      recipients.value = await api.postcardRecipients();
     }
   } catch (error) {
     if (await handleUnauthorized(error)) {
@@ -76,7 +92,9 @@ async function loadCompose(): Promise<void> {
     }
     loadError.value =
       error instanceof ApiError && error.code === 'RESOURCE_NOT_ACCESSIBLE'
-        ? '这封草稿已经不存在，或不属于你。'
+        ? boundPassageId
+          ? '这段共途现在不可访问，可能不在你的参与范围内。'
+          : '这封草稿已经不存在，或不属于你。'
         : toFriendlyAuthMessage(error);
   } finally {
     isLoading.value = false;
@@ -108,7 +126,10 @@ async function saveDraft(): Promise<string | null> {
     };
     const draft = draftId.value
       ? await api.updatePostcardDraft(draftId.value, payload)
-      : await api.createPostcardDraft(payload);
+      : await api.createPostcardDraft({
+          ...payload,
+          ...(passage.value ? { passageId: passage.value.id } : {}),
+        });
 
     draftId.value = draft.id;
     draftRecipientName.value = draft.recipient?.nickname ?? null;
@@ -199,9 +220,21 @@ onMounted(loadCompose);
     </div>
 
     <form v-else class="section-card compose-form" novalidate @submit.prevent="requestSend">
+      <div v-if="passage" class="passage-compose-context">
+        <p class="form-success" role="status">这段共途 · {{ passage.topic }}</p>
+        <p class="field-hint">
+          收件人由这段共途决定：{{ passage.counterpart.nickname }}。寄出后仍按双方城市距离计算到达时间。
+        </p>
+      </div>
+
       <div class="form-field">
         <label for="compose-recipient">收件人</label>
-        <select id="compose-recipient" v-model="recipientId" name="recipient">
+        <select
+          id="compose-recipient"
+          v-model="recipientId"
+          name="recipient"
+          :disabled="Boolean(passage)"
+        >
           <option value="">请选择收件人</option>
           <option v-for="recipient in recipients" :key="recipient.id" :value="recipient.id">
             {{ recipient.nickname }} · {{ recipient.city.name }}
@@ -213,7 +246,14 @@ onMounted(loadCompose);
             {{ draftRecipientName }}（当前不可接信）
           </option>
         </select>
-        <p v-if="recipients.length === 0 && !draftRecipientName" class="field-hint">
+        <p v-if="passage" class="field-hint">
+          {{
+            passage.permissions.canSend
+              ? '收件人固定为这段共途的对方，不能改成其他人。'
+              : '这段共途当前不允许新的通信；续程或由对方恢复后才能寄出。'
+          }}
+        </p>
+        <p v-else-if="recipients.length === 0 && !draftRecipientName" class="field-hint">
           当前没有可用的演示收件人。需要把对方邮箱加入服务端白名单，并让对方在设置中选择城市。
         </p>
         <p v-else class="field-hint">
@@ -251,6 +291,13 @@ onMounted(loadCompose);
         <button class="button" type="submit" :disabled="!canSubmit || isSaving || isSending">
           寄出这张明信片
         </button>
+        <RouterLink
+          v-if="passage"
+          class="delivery-link"
+          :to="{ name: 'passage-detail', params: { id: passage.id } }"
+        >
+          返回共途
+        </RouterLink>
         <RouterLink class="delivery-link" :to="{ name: 'post-office' }">返回邮局</RouterLink>
       </div>
 

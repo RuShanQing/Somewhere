@@ -221,7 +221,13 @@ describe('POSTCARD · 草稿、距离延迟、在途保密与投递（真实 Pos
     const other = await register('旁观者');
 
     const created = await createDraft(owner, { body: '  第一封慢信  ' });
-    expect(Object.keys(created).sort()).toEqual(['body', 'id', 'recipient', 'updatedAt']);
+    expect(Object.keys(created).sort()).toEqual([
+      'body',
+      'id',
+      'passageId',
+      'recipient',
+      'updatedAt',
+    ]);
     expect(created.body).toBe('第一封慢信');
     expect(created.recipient).toBeNull();
 

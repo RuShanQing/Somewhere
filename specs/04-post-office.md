@@ -2,7 +2,7 @@
 
 **优先级：P0** · 主导航：邮局 · 归属：PostcardModule / PostOffice Web
 
-> 实现状态（2026-10-28，TASK-004）：已实现 `/post-office` 三栏摘要、`/post-office/compose` 写信页、`/postcards/:id` 详情页，以及加载/空/错误/重试、390px 与键盘基础。摘要不返回正文；收件人在途详情返回 404。**尚未实现**：回信、通知、举报/封锁/审核隔离；这些能力不得在 UI 中以可用按钮伪装。
+> 实现状态（2026-10-28，TASK-004）：已实现 `/post-office` 三栏摘要、`/post-office/compose` 写信页、`/postcards/:id` 详情页，以及加载/空/错误/重试、390px 与键盘基础。摘要不返回正文；收件人在途详情返回 404。TASK-008 增补：写信页可携带 `passageId`，显示共途主题、收件人固定为共途对方，并提供「返回共途」。**尚未实现**：回信、通知、举报/封锁/审核隔离；这些能力不得在 UI 中以可用按钮伪装。
 
 ## POSTOFFICE-01 目标
 
@@ -39,7 +39,7 @@
 ```
 这只是响应**结构示例**，不是服务器真实数据。列表支持分页；敏感正文不进入 summary。`stage` 是象征性的视觉阶段，不能据此推断真实物流位置。
 
-TASK-004 实际补充的登录接口：`GET /postcards/recipients`（演示白名单）、草稿 CRUD、`POST /postcards/drafts/:id/send`、`GET /postcards/transit`、`GET /postcards/inbox`、`GET /postcards/:id`。所有路径都带 `/api/v1` 前缀。
+TASK-004 实际补充的登录接口：`GET /postcards/recipients`（缺省演示白名单；TASK-008 起带 `passageId` 时为共途对方）、草稿 CRUD、`POST /postcards/drafts/:id/send`、`GET /postcards/transit`、`GET /postcards/inbox`、`GET /postcards/:id`。所有路径都带 `/api/v1` 前缀。
 
 ## POSTOFFICE-05 异常与权限
 

@@ -28,17 +28,23 @@ Somewhere 面向成年人的陌生人异步交流；主要风险是骚扰、滥�
 - 封锁既不要求说明理由，也不向被封锁者发送特殊羞辱性提示。
 - 举报支持 `targetType`, `targetId`, `reason`, `details?`，用户只能提交自己有权限触达的对象；速率限制与滥用防控。
 - 被举报对象在调查期间的可见性由审核策略决定，不能自动作为公开定罪。
-- 后台审核员（角色由后端授权）可查看必要证据并执行 `APPROVE/REJECT/REMOVE/RESTRICT`。
+- 后台管理员（`ADMIN` 角色，由后端授权）可查看必要证据并执行 `APPROVE/REJECT/REMOVE/RESTRICT`。
 - 封锁或举报不能通过重新建立共途、信友身份、善意接力或更换公开入口绕过。
 
 ## SAFETY-04 接口
 
-- `POST /api/v1/safety/blocks`：封锁用户。
-- `DELETE /api/v1/safety/blocks/:userId`：由封锁者本人取消。
-- `POST /api/v1/safety/reports`：提交举报。
-- `GET /api/v1/moderation/queue`：仅审核员访问。
-- `POST /api/v1/moderation/stories/:id/decision`：仅审核员执行故事审核。
-- `POST /api/v1/moderation/targets/:id/restrict`：安全操作必须审计。
+- `POST /api/v1/safety/blocks`：封锁用户（TASK-005 未实现，留给后续安全任务）。
+- `DELETE /api/v1/safety/blocks/:userId`：由封锁者本人取消（未实现）。
+- `POST /api/v1/safety/reports`：提交举报（未实现）。
+- `GET /api/v1/moderation/queue`：仅 `ADMIN` 访问；匿名 401，普通用户 403。TASK-005 已实现。
+- `POST /api/v1/moderation/stories/:id/decision`：仅 `ADMIN` 执行故事审核；匿名 401，普通用户 403。TASK-005 已实现。
+- `POST /api/v1/moderation/targets/:id/restrict`：安全操作必须审计；仅 `ADMIN`（未实现）。
+
+角色定义、授予方式和会话解析见 [02-auth.md](02-auth.md) 的 AUTH-08（当前实现）与 AUTH-09（规划）；完整四角色设计见 [15-roles-and-permissions.md](15-roles-and-permissions.md)。前端隐藏入口不构成权限控制。
+
+管理员不得审核自己创作的故事：即使拥有 `ADMIN` 角色，对本人故事执行 `APPROVE/REJECT/REMOVE` 返回 403 `FORBIDDEN`，且不写入审核动作。该限制用于最小化利益冲突，演示和 E2E 使用两个账号。
+
+TASK-005 已实现“城市故事审核最小闭环”：`ADMIN` 队列、通过 / 驳回 / 下架、自审拒绝与 `story_review_actions` 审计。举报、封锁、通用安全处置和 `RESTRICT` 的实际执行仍未实现，不得在界面或文档中宣称已具备。
 
 请求拒绝需要稳定错误码，不在 API 错误中透露举报人或内部证据。
 
@@ -74,3 +80,16 @@ Somewhere 面向成年人的陌生人异步交流；主要风险是骚扰、滥�
 - 用户只能操作本人的封锁、公开授权与私人内容。
 - 错误信息与日志无密码、会话 Cookie、密文密钥和他人私信正文。
 - 在途信件始终受送达前隔离保护，不因错误或通知泄露内容。
+
+## SAFETY-09 角色扩展规划（未实现）
+
+> 2026-10-29 记录目标，当前代码仍只支持 `ADMIN` 审核。完整设计见 [15-roles-and-permissions.md](15-roles-and-permissions.md)。
+
+- 计划新增 `MODERATOR`（内容审核员）；`CURATOR`（城市故事策展人）在精选专题功能立项后再加入。
+- 当前故事审核仍只允许 `ADMIN`；改造为 `MODERATOR + ADMIN` 需独立任务与回归测试。
+- `MODERATOR` 可以审核公开故事、处理举报（举报功能实现后），但不能管理用户、角色和平台配置，不能读取私人明信片、共同日记或个人记忆。
+- `CURATOR` 只能管理已审核、已发布、已授权且未归档的公开内容；不能执行审核决定，不能访问私人内容。
+- `ADMIN` 不能查看其他用户的邮箱；后台用户列表只使用 `id/nickname/role/createdAt`。`ADMIN` 也不能读取私人信件或私人记忆。
+- 举报证据读取必须是独立、最小、受审计的流程；不得为任何后台角色增加私人内容的批量查询或导出。
+- 角色授予/撤销只能由 `ADMIN` 执行，必须写审计；不能授予 `GUEST`，不能降级最后一个 `ADMIN`。
+- 前端隐藏后台入口不构成权限控制；所有后台接口继续由 `SessionGuard + RolesGuard` 强制鉴权。

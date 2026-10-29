@@ -66,8 +66,9 @@ Somewhere 是 Web 优先的慢社交产品。用户通过距离延迟送达的�
 8. 善意接力**不要求回信、不建立债务**，也不能绕过封锁。
 9. 用户位置只处理公开同意的城市级信息，不收集精确住址与实时定位。
 10. 所有公开内容都经历审核流程；封锁 / 举报 / 权限校验由后端执行。
+11. 后台角色不构成私人内容的直通权限：`ADMIN` 不允许查看其他用户的邮箱，`ADMIN / MODERATOR / CURATOR` 都不能无条件读取私人明信片、共同日记或个人记忆；角色授予/撤销必须审计。
 
-详细权威规则分别见 `specs/05-postcards-delivery.md`、`specs/09-shared-passage.md`、`specs/11-memories.md` 和 `specs/12-safety-and-moderation.md`。
+详细权威规则分别见 `specs/05-postcards-delivery.md`、`specs/09-shared-passage.md`、`specs/11-memories.md`、`specs/12-safety-and-moderation.md` 和 `specs/15-roles-and-permissions.md`。
 
 ## 5. 改动范围和审批门槛
 

@@ -1,4 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createApp } from '../../src/app.factory';
@@ -46,10 +47,16 @@ export async function resetDatabase(app: INestApplication): Promise<void> {
     throw new Error('拒绝清空非测试数据库');
   }
   const prisma = app.get(PrismaService);
-  // cities 是静态目录，跨测试保留；只清空用户与邮局相关数据
+  // cities 是静态目录，跨测试保留；只清空用户、故事、邮局与共途相关数据
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "postcard_drafts", "postcards", "profiles", "sessions", "users" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "passage_events", "passage_participants", "passages", "story_review_actions", "stories", "postcard_drafts", "postcards", "profiles", "sessions", "users" RESTART IDENTITY CASCADE',
   );
+}
+
+/** 测试夹具：把已注册用户提升为 ADMIN；不通过公开接口绕过角色限制。 */
+export async function promoteToAdmin(app: INestApplication, userId: string): Promise<void> {
+  const prisma = app.get(PrismaService);
+  await prisma.user.update({ where: { id: userId }, data: { role: 'ADMIN' } });
 }
 
 /** 直接运行 vitest 时也能保证城市目录存在（正常由 prepare-test-db 写入）。 */
@@ -74,6 +81,62 @@ export async function ensureCitiesSeeded(app: INestApplication): Promise<void> {
       },
     });
   }
+}
+
+export interface PassageFixtureParticipant {
+  userId: string;
+  consentState?: 'ALLOW' | 'PAUSED' | 'CLOSED';
+}
+
+export interface PassageFixtureInput {
+  topic?: string;
+  kind?: 'ONE_OFF' | 'ONGOING' | 'SEASONAL';
+  participants: PassageFixtureParticipant[];
+}
+
+/**
+ * 测试夹具：直接写入共途三表。
+ * 生产代码不提供 HTTP 创建入口；夹具用于让测试从外部验证状态与权限，
+ * 不调用 PassageService 的内部 helper 代替断言。
+ */
+export async function seedPassage(
+  app: INestApplication,
+  input: PassageFixtureInput,
+): Promise<{ id: string }> {
+  const prisma = app.get(PrismaService);
+  const id = randomUUID();
+  const topic = input.topic ?? '海边的冬天';
+  const kind = input.kind ?? 'ONE_OFF';
+
+  await prisma.$executeRawUnsafe(
+    'INSERT INTO "passages" ("id", "topic", "kind", "progress_status", "created_at", "updated_at") VALUES ($1::uuid, $2, $3::"PassageKind", \'ACTIVE\', NOW(), NOW())',
+    id,
+    topic,
+    kind,
+  );
+
+  for (const participant of input.participants) {
+    const consentState = participant.consentState ?? 'ALLOW';
+    await prisma.$executeRawUnsafe(
+      'INSERT INTO "passage_participants" ("passage_id", "user_id", "consent_state", "paused_at", "last_confirmed_at") VALUES ($1::uuid, $2::uuid, $3::"PassageConsentState", $4, NOW())',
+      id,
+      participant.userId,
+      consentState,
+      consentState === 'PAUSED' ? new Date() : null,
+    );
+  }
+
+  const actorId = input.participants[0]?.userId;
+  if (actorId) {
+    await prisma.$executeRawUnsafe(
+      'INSERT INTO "passage_events" ("id", "passage_id", "actor_id", "event_type", "created_at") VALUES ($1::uuid, $2::uuid, $3::uuid, \'CREATED\', NOW())',
+      randomUUID(),
+      id,
+      actorId,
+    );
+  }
+
+  return { id };
 }
 
 interface SetCookieCarrier {

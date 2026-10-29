@@ -136,4 +136,61 @@ describe('API 客户端', () => {
     expect(captured[0]?.init.method).toBe('DELETE');
     expect(captured[1]?.url).toBe('/api/v1/postcards/inbox?limit=5&offset=10');
   });
+
+  it('故事列表编码城市、主题与游标，详情与我的故事路径正确', async () => {
+    const { client, captured } = buildClient(200, { items: [], nextCursor: null });
+
+    await client.stories({
+      cityId: 'city-1',
+      topic: '雨 天',
+      cursor: 'abc+/=',
+      limit: 12,
+    });
+    await client.storyDetail('story/1');
+    await client.myStories();
+    await client.myStory('story/2');
+
+    expect(captured[0]?.url).toBe(
+      '/api/v1/stories?cityId=city-1&topic=%E9%9B%A8+%E5%A4%A9&cursor=abc%2B%2F%3D&limit=12',
+    );
+    expect(captured[1]?.url).toBe('/api/v1/stories/story%2F1');
+    expect(captured[2]?.url).toBe('/api/v1/stories/mine');
+    expect(captured[3]?.url).toBe('/api/v1/stories/mine/story%2F2');
+  });
+
+  it('审核队列与决策使用正确的路径、方法和请求体', async () => {
+    const { client, captured } = buildClient(200, { id: 'story-1', reviewStatus: 'APPROVED' });
+
+    await client.moderationQueue({ cursor: 'next', limit: 20 });
+    await client.decideStory('story-1', { action: 'REJECT', reasonCode: 'PRIVACY' });
+
+    expect(captured[0]?.url).toBe('/api/v1/moderation/queue?cursor=next&limit=20');
+    expect(captured[0]?.init.method).toBe('GET');
+    expect(captured[1]?.url).toBe('/api/v1/moderation/stories/story-1/decision');
+    expect(captured[1]?.init.method).toBe('POST');
+    expect(captured[1]?.init.body).toBe(
+      JSON.stringify({ action: 'REJECT', reasonCode: 'PRIVACY' }),
+    );
+  });
+
+  it('共途收件人请求携带 passageId，缺省仍走白名单路径', async () => {
+    const { client, captured } = buildClient(200, []);
+
+    await client.postcardRecipients('passage-1');
+    await client.postcardRecipients();
+
+    expect(captured[0]?.url).toBe('/api/v1/postcards/recipients?passageId=passage-1');
+    expect(captured[1]?.url).toBe('/api/v1/postcards/recipients');
+  });
+
+  it('世界记忆地图城市聚合适配路径与主题参数', async () => {
+    const { client, captured } = buildClient(200, { items: [] });
+
+    await client.cityMemories({ topic: '雨 天' });
+    await client.cityMemories();
+
+    expect(captured[0]?.url).toBe('/api/v1/discovery/cities?topic=%E9%9B%A8+%E5%A4%A9');
+    expect(captured[0]?.init.method).toBe('GET');
+    expect(captured[1]?.url).toBe('/api/v1/discovery/cities');
+  });
 });

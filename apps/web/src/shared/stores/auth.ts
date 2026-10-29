@@ -14,6 +14,7 @@ export const useAuthStore = defineStore('auth', () => {
   const sessionError = ref<string | null>(null);
 
   const isAuthenticated = computed(() => user.value !== null);
+  const isModerator = computed(() => user.value?.role === 'ADMIN');
 
   async function loadSession(): Promise<void> {
     status.value = 'loading';
@@ -67,6 +68,7 @@ export const useAuthStore = defineStore('auth', () => {
     status,
     sessionError,
     isAuthenticated,
+    isModerator,
     loadSession,
     ensureLoaded,
     login,

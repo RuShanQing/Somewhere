@@ -285,6 +285,309 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/passages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 我参与的共途列表
+         * @description 只返回本人参与的共途；非参与者不会出现在列表中。
+         */
+        get: operations["PassagesController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/passages/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 共途详情
+         * @description 仅参与者可读；非参与者统一返回不可访问，避免枚举。
+         */
+        get: operations["PassagesController_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/passages/{id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 停泊本人许可
+         * @description 只改变当前用户的通信意愿；不会改变对方状态，也不会取消已寄出的信。
+         */
+        post: operations["PassagesController_pause"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/passages/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 续程本人许可
+         * @description 只恢复当前用户的意愿；不能替代对方恢复，也不会自动恢复已完成的共途。
+         */
+        post: operations["PassagesController_resume"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/passages/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 完成这段共途
+         * @description 只改变经历进度，不改变任何一方的通信意愿，也不会自动成为信友。
+         */
+        post: operations["PassagesController_complete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/passages/{id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 归档这段共途
+         * @description 经历级归档：从进行中列表消失，但历史与详情仍对参与者可读。
+         */
+        post: operations["PassagesController_archive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stories/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 我的城市故事（全部状态） */
+        get: operations["MyStoriesController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stories/mine/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 我的单条故事详情（包含未公开内容） */
+        get: operations["MyStoriesController_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 公开城市故事列表
+         * @description 只返回审核通过、已获得公开授权、已发布且未归档的故事；支持城市、主题和游标分页。匿名可访问。
+         */
+        get: operations["StoriesController_list"];
+        put?: never;
+        /**
+         * 创建故事草稿
+         * @description 草稿只对作者可见，提交后才能进入审核。
+         */
+        post: operations["StoryActionsController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stories/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 公开故事详情
+         * @description 未审核、驳回、撤回或下架的故事统一返回不可访问，避免暴露存在性。
+         */
+        get: operations["StoriesController_get"];
+        put?: never;
+        post?: never;
+        /**
+         * 删除故事草稿
+         * @description 只有 DRAFT 可以删除；已提交故事只能撤回。
+         */
+        delete: operations["StoryActionsController_remove"];
+        options?: never;
+        head?: never;
+        /** 编辑我的草稿或未通过故事 */
+        patch: operations["StoryActionsController_update"];
+        trace?: never;
+    };
+    "/api/v1/stories/{id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 提交故事审核
+         * @description 草稿或未通过故事进入 PENDING；滚动 7 天最多提交 3 次。
+         */
+        post: operations["StoryActionsController_submit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stories/{id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 撤回故事公开授权
+         * @description PENDING/APPROVED 变为 REMOVED，并立即退出公开集合。
+         */
+        post: operations["StoryActionsController_withdraw"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/moderation/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 故事审核队列
+         * @description 仅 ADMIN 可访问；只返回 PENDING，按提交时间升序。
+         */
+        get: operations["ModerationController_queue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/moderation/stories/{id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 审核故事
+         * @description 仅 ADMIN；APPROVE/REJECT 只适用于 PENDING，REMOVE 适用于 PENDING/APPROVED；管理员不能审核自己的故事。
+         */
+        post: operations["ModerationController_decide"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/discovery/cities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 世界记忆地图城市入口
+         * @description 只返回拥有活跃公开故事的城市；与城市故事站共用同一审核与公开条件，匿名可读，不返回作者信息、坐标或实时位置。
+         */
+        get: operations["DiscoveryController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health": {
         parameters: {
             query?: never;
@@ -349,6 +652,12 @@ export interface components {
              * @example null
              */
             cityId?: string | null;
+            /**
+             * @description 当前账号的平台角色；只有 ADMIN 可访问故事审核接口
+             * @example USER
+             * @enum {string}
+             */
+            role: "USER" | "ADMIN";
         };
         ErrorResponseDto: {
             /**
@@ -412,6 +721,12 @@ export interface components {
              * @example null
              */
             cityId?: string | null;
+            /**
+             * @description 当前账号的平台角色；只有 ADMIN 可访问故事审核接口
+             * @example USER
+             * @enum {string}
+             */
+            role: "USER" | "ADMIN";
         };
         CitySummaryDto: {
             /**
@@ -536,6 +851,8 @@ export interface components {
             recipient?: components["schemas"]["PostcardParticipantDto"] | null;
             /** @description 草稿正文 */
             body: string;
+            /** @description 绑定的共途 ID；未绑定为 null，创建后不可改绑 */
+            passageId?: string | null;
             /** @description 最后更新时间（UTC ISO 8601） */
             updatedAt: string;
         };
@@ -545,8 +862,10 @@ export interface components {
              * @example 今天海面很安静，想把这句话慢慢寄给你。
              */
             body: string;
-            /** @description 收件人 ID；草稿阶段可以为空，寄出前必须填写 */
+            /** @description 收件人 ID；草稿阶段可以为空。若同时提供 passageId，则必须与共途对方一致 */
             recipientId?: string | null;
+            /** @description 共途 ID；提供后收件人由服务端解析为共途对方，创建后不可改绑 */
+            passageId?: string | null;
         };
         UpdatePostcardDraftDto: {
             /**
@@ -610,6 +929,255 @@ export interface components {
             receiver: components["schemas"]["PostcardParticipantDto"];
             originCity: components["schemas"]["PostcardCityDto"];
             destinationCity: components["schemas"]["PostcardCityDto"];
+        };
+        PassageSelfDto: {
+            /**
+             * @description 本人当前通信意愿
+             * @enum {string}
+             */
+            consentState: "ALLOW" | "PAUSED" | "CLOSED";
+            /** @description 本次停泊时间 */
+            pausedAt?: string | null;
+        };
+        PassageCityDto: {
+            /** @description 城市 ID */
+            id: string;
+            /**
+             * @description 城市名
+             * @example 里斯本
+             */
+            name: string;
+            /**
+             * @description 国家代码
+             * @example PT
+             */
+            countryCode: string;
+        };
+        PassageCounterpartDto: {
+            /** @description 对方公开昵称；不返回邮箱或用户 ID */
+            nickname: string;
+            /** @description 对方公开城市 */
+            city?: components["schemas"]["PassageCityDto"] | null;
+            /**
+             * @description 对方当前通信意愿；不返回原因
+             * @enum {string}
+             */
+            consentState: "ALLOW" | "PAUSED" | "CLOSED";
+        };
+        PassagePermissionsDto: {
+            /** @description 当前是否允许开展新的共途通信；由进度与双方意愿共同决定 */
+            canSend: boolean;
+        };
+        PassageSummaryDto: {
+            /** @description 共途 ID */
+            id: string;
+            /** @description 共同主题 */
+            topic: string;
+            /**
+             * @description 共途类型
+             * @enum {string}
+             */
+            kind: "ONE_OFF" | "ONGOING" | "SEASONAL";
+            /**
+             * @description 经历进度
+             * @enum {string}
+             */
+            progressStatus: "ACTIVE" | "COMPLETED" | "ARCHIVED";
+            /** @description 创建时间（UTC ISO 8601） */
+            createdAt: string;
+            /** @description 最后更新时间（UTC ISO 8601） */
+            updatedAt: string;
+            /** @description 完成时间 */
+            completedAt?: string | null;
+            /** @description 归档时间 */
+            archivedAt?: string | null;
+            me: components["schemas"]["PassageSelfDto"];
+            counterpart: components["schemas"]["PassageCounterpartDto"];
+            permissions: components["schemas"]["PassagePermissionsDto"];
+        };
+        PassageListDto: {
+            items: components["schemas"]["PassageSummaryDto"][];
+        };
+        StoryCityDto: {
+            /** @description 城市 ID */
+            id: string;
+            /**
+             * @description 城市名
+             * @example 里斯本
+             */
+            name: string;
+            /**
+             * @description 国家代码
+             * @example PT
+             */
+            countryCode: string;
+        };
+        OwnStoryDto: {
+            /** @description 故事 ID */
+            id: string;
+            /** @description 标题 */
+            title: string;
+            /** @description 正文；只返回给作者本人 */
+            body: string;
+            /** @description 主题标签 */
+            topicTags: string[];
+            city: components["schemas"]["StoryCityDto"];
+            /**
+             * @description 审核状态
+             * @enum {string}
+             */
+            reviewStatus: "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "REMOVED";
+            /** @description 提交审核时间 */
+            submittedAt?: string | null;
+            /** @description 最近审核时间 */
+            reviewedAt?: string | null;
+            /** @description 公开时间；审核通过但排队时为 null */
+            publishedAt?: string | null;
+            /**
+             * @description 撤回/下架来源；仅作者本人可见
+             * @enum {string|null}
+             */
+            removedBy?: "AUTHOR" | "MODERATOR" | null;
+            /** @description 创建时间（UTC ISO 8601） */
+            createdAt: string;
+            /** @description 最后更新时间（UTC ISO 8601） */
+            updatedAt: string;
+        };
+        CreateStoryDto: {
+            /** @description 故事所属城市 ID（静态城市目录） */
+            cityId: string;
+            /**
+             * @description 标题，1–80 个 Unicode 字符
+             * @example 雨夜书店
+             */
+            title: string;
+            /**
+             * @description 正文，20–3000 个 Unicode 字符，不能全是空白
+             * @example 雨落在旧书店的玻璃上，店里的人都没有说话。
+             */
+            body: string;
+            /**
+             * @description 主题标签，最多 3 个，每个 1–24 字符
+             * @example [
+             *       "城市日常",
+             *       "雨天"
+             *     ]
+             */
+            topicTags?: string[];
+        };
+        UpdateStoryDto: {
+            /** @description 标题，1–80 个 Unicode 字符 */
+            title?: string;
+            /** @description 正文，20–3000 个 Unicode 字符 */
+            body?: string;
+            /** @description 主题标签，最多 3 个，每个 1–24 字符 */
+            topicTags?: string[];
+            /** @description 故事所属城市 ID */
+            cityId?: string;
+        };
+        PublicStoryItemDto: {
+            /** @description 故事 ID */
+            id: string;
+            /** @description 标题 */
+            title: string;
+            /** @description 正文摘要 */
+            excerpt: string;
+            /** @description 主题标签 */
+            topicTags: string[];
+            /** @description 作者公开昵称；不返回邮箱或用户 ID */
+            authorNickname: string;
+            city: components["schemas"]["StoryCityDto"];
+            /** @description 公开时间（UTC ISO 8601） */
+            publishedAt: string;
+        };
+        PublicStoryListDto: {
+            items: components["schemas"]["PublicStoryItemDto"][];
+            /** @description 下一页游标 */
+            nextCursor?: string | null;
+        };
+        PublicStoryDetailDto: {
+            /** @description 故事 ID */
+            id: string;
+            /** @description 标题 */
+            title: string;
+            /** @description 正文 */
+            body: string;
+            /** @description 主题标签 */
+            topicTags: string[];
+            /** @description 作者公开昵称 */
+            authorNickname: string;
+            city: components["schemas"]["StoryCityDto"];
+            /** @description 公开时间（UTC ISO 8601） */
+            publishedAt: string;
+        };
+        ModerationStoryItemDto: {
+            /** @description 故事 ID */
+            id: string;
+            /** @description 标题 */
+            title: string;
+            /** @description 正文；仅管理员审核队列可见 */
+            body: string;
+            /** @description 主题标签 */
+            topicTags: string[];
+            /** @description 作者公开昵称；不返回邮箱 */
+            authorNickname: string;
+            city: components["schemas"]["StoryCityDto"];
+            /** @description 提交审核时间（UTC ISO 8601） */
+            submittedAt: string;
+        };
+        ModerationQueueDto: {
+            items: components["schemas"]["ModerationStoryItemDto"][];
+            /** @description 下一页游标 */
+            nextCursor?: string | null;
+        };
+        StoryDecisionDto: {
+            /**
+             * @description 审核动作；APPROVE/REJECT 只适用于 PENDING，REMOVE 适用于 PENDING/APPROVED
+             * @enum {string}
+             */
+            action: "APPROVE" | "REJECT" | "REMOVE";
+            /**
+             * @description 固定原因码；只写入审计，不返回内部备注
+             * @enum {string}
+             */
+            reasonCode?: "PRIVACY" | "CONTACT_INFO" | "HARASSMENT" | "ILLEGAL" | "OTHER";
+        };
+        StoryDecisionResponseDto: {
+            /** @description 故事 ID */
+            id: string;
+            /**
+             * @description 决策后的状态
+             * @enum {string}
+             */
+            reviewStatus: "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "REMOVED";
+            /** @description 公开时间；排队时为 null */
+            publishedAt?: string | null;
+        };
+        DiscoveryCityDto: {
+            /** @description 城市 ID */
+            id: string;
+            /**
+             * @description 城市名
+             * @example 里斯本
+             */
+            name: string;
+            /**
+             * @description 国家代码
+             * @example PT
+             */
+            countryCode: string;
+        };
+        CityMemoryItemDto: {
+            /** @description 故事发生的城市 */
+            city: components["schemas"]["DiscoveryCityDto"];
+            /** @description 该城市当前活跃公开故事数量 */
+            publicStoryCount: number;
+            /** @description 该城市最近一次公开时间（UTC ISO 8601） */
+            latestPublishedAt: string;
+        };
+        CityMemoryListDto: {
+            /** @description 有活跃公开故事的城市；按最近公开时间倒序，不按数量排序 */
+            items: components["schemas"]["CityMemoryItemDto"][];
         };
         HealthResponseDto: {
             /**
@@ -927,7 +1495,10 @@ export interface operations {
     };
     PostcardsController_listRecipients: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 共途 ID；提供时只返回该共途对方（且当前允许新的通信时），缺省使用演示白名单 */
+                passageId?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -943,6 +1514,22 @@ export interface operations {
                 };
             };
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1292,6 +1879,717 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    PassagesController_list: {
+        parameters: {
+            query?: {
+                /** @description 按经历进度筛选；缺省 ALL，只返回本人参与的共途 */
+                status?: "ALL" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PassageListDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    PassagesController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PassageSummaryDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    PassagesController_pause: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PassageSummaryDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    PassagesController_resume: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PassageSummaryDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    PassagesController_complete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PassageSummaryDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    PassagesController_archive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PassageSummaryDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    MyStoriesController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnStoryDto"][];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    MyStoriesController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnStoryDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    StoriesController_list: {
+        parameters: {
+            query?: {
+                /** @description 按城市筛选 */
+                cityId?: string;
+                /** @description 按主题标签精确筛选，最多 24 字符 */
+                topic?: string;
+                /** @description 上一页返回的游标 */
+                cursor?: string;
+                /** @description 每页数量，1–24，默认 12 */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicStoryListDto"];
+                };
+            };
+        };
+    };
+    StoryActionsController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateStoryDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnStoryDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    StoriesController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicStoryDetailDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    StoryActionsController_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 草稿已删除 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    StoryActionsController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateStoryDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnStoryDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    StoryActionsController_submit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnStoryDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    StoryActionsController_withdraw: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnStoryDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    ModerationController_queue: {
+        parameters: {
+            query?: {
+                /** @description 上一页返回的游标 */
+                cursor?: string;
+                /** @description 每页数量，1–50，默认 20 */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModerationQueueDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    ModerationController_decide: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryDecisionDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryDecisionResponseDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    DiscoveryController_list: {
+        parameters: {
+            query?: {
+                /** @description 按主题标签精确筛选；为空时返回全部有公开故事的城市 */
+                topic?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 有公开故事的城市聚合 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CityMemoryListDto"];
+                };
+            };
+            /** @description 主题参数不合法 */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

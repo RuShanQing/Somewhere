@@ -11,9 +11,14 @@ export interface DraftChanges {
 export class DraftRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(ownerId: string, body: string, recipientId: string | null): Promise<PostcardDraft> {
+  async create(
+    ownerId: string,
+    body: string,
+    recipientId: string | null,
+    passageId: string | null,
+  ): Promise<PostcardDraft> {
     return this.prisma.postcardDraft.create({
-      data: { ownerId, body, recipientId },
+      data: { ownerId, body, recipientId, passageId },
     });
   }
 

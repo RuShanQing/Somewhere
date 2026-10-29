@@ -32,6 +32,7 @@ import {
   UpdatePostcardDraftDto,
 } from './dto/draft.dto';
 import { PostcardListQueryDto } from './dto/list-query.dto';
+import { RecipientsQueryDto } from './dto/recipients-query.dto';
 import {
   InboxItemDto,
   PostcardDetailDto,
@@ -57,8 +58,13 @@ export class PostcardsController {
   })
   @ApiOkResponse({ type: [RecipientResponseDto] })
   @ApiUnauthorizedResponse({ type: ErrorResponseDto })
-  listRecipients(@CurrentUser() user: AuthenticatedUser): Promise<RecipientResponseDto[]> {
-    return this.postcards.listRecipients(user);
+  @ApiNotFoundResponse({ type: ErrorResponseDto })
+  @ApiUnprocessableEntityResponse({ type: ErrorResponseDto })
+  listRecipients(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: RecipientsQueryDto,
+  ): Promise<RecipientResponseDto[]> {
+    return this.postcards.listRecipients(user, query.passageId);
   }
 
   @Get('drafts')

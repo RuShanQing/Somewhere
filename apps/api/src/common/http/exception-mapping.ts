@@ -12,7 +12,7 @@ export interface ResolvedError {
 const STATUS_CODES: Record<number, ErrorCode> = {
   400: 'VALIDATION_ERROR',
   401: 'AUTH_REQUIRED',
-  403: 'ORIGIN_NOT_ALLOWED',
+  403: 'FORBIDDEN',
   404: 'NOT_FOUND',
   413: 'VALIDATION_ERROR',
   422: 'VALIDATION_ERROR',
@@ -65,7 +65,7 @@ function messageForStatus(status: number): string {
     case 401:
       return '需要登录后才能访问';
     case 403:
-      return '请求来源不被允许';
+      return '没有权限执行此操作';
     case 404:
       return '请求的资源不存在';
     case 429:

@@ -7,6 +7,7 @@ declare module 'vue-router' {
   interface RouteMeta {
     title?: string;
     requiresAuth?: boolean;
+    requiresModerator?: boolean;
     guestOnly?: boolean;
     mainNav?: boolean;
     shell?: boolean;
@@ -40,10 +41,58 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '发现', mainNav: true },
   },
   {
+    path: '/discover/map',
+    name: 'map',
+    component: () => import('../features/discover/views/MapView.vue'),
+    meta: { title: '世界记忆地图', mainNav: true },
+  },
+  {
+    path: '/discover/map/:cityId',
+    name: 'map-city',
+    component: () => import('../features/discover/views/MapCityView.vue'),
+    meta: { title: '城市记忆', mainNav: true },
+  },
+  {
+    path: '/discover/stories/:id',
+    name: 'story-detail',
+    component: () => import('../features/discover/views/StoryDetailView.vue'),
+    meta: { title: '城市故事', mainNav: true },
+  },
+  {
+    path: '/discover/write/:id?',
+    name: 'story-write',
+    component: () => import('../features/discover/views/StoryWriteView.vue'),
+    meta: { title: '写城市故事', requiresAuth: true, mainNav: true },
+  },
+  {
+    path: '/discover/mine',
+    name: 'my-stories',
+    component: () => import('../features/discover/views/MyStoriesView.vue'),
+    meta: { title: '我的故事', requiresAuth: true, mainNav: true },
+  },
+  {
+    path: '/admin/moderation',
+    name: 'moderation',
+    component: () => import('../features/moderation/views/ModerationView.vue'),
+    meta: { title: '故事审核', requiresAuth: true, requiresModerator: true, shell: true },
+  },
+  {
+    path: '/forbidden',
+    name: 'forbidden',
+    component: () => import('../shared/views/ForbiddenView.vue'),
+    meta: { title: '没有权限', shell: true },
+  },
+  {
     path: '/passages',
     name: 'passages',
     component: () => import('../features/passages/views/PassagesView.vue'),
     meta: { title: '共途', requiresAuth: true, mainNav: true },
+  },
+  {
+    path: '/passages/:id',
+    name: 'passage-detail',
+    component: () => import('../features/passages/views/PassageDetailView.vue'),
+    meta: { title: '共途详情', requiresAuth: true, mainNav: true },
   },
   {
     path: '/memories',
@@ -92,6 +141,10 @@ router.beforeEach(async (to) => {
       name: 'login',
       query: to.fullPath === '/' ? {} : { redirect: to.fullPath },
     };
+  }
+
+  if (to.meta.requiresModerator && !auth.isModerator) {
+    return { name: 'forbidden' };
   }
 
   if (to.meta.guestOnly && auth.isAuthenticated) {

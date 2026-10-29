@@ -6,7 +6,7 @@ test('SMOKE-02 四个主导航的空态与标题真实可信', async ({ page }) 
 
   const expectations = [
     { label: '邮局', path: '/post-office', heading: '你的信，会按距离慢慢抵达', empty: '还没有新来信' },
-    { label: '发现', path: '/discover', heading: '看看别人生活的城市', empty: '还没有已审核的城市故事' },
+    { label: '发现', path: '/discover', heading: '看看别人生活的城市', empty: '还没有符合条件的故事' },
     { label: '共途', path: '/passages', heading: '一起走过的路，可以停泊', empty: '还没有正在进行的共途' },
     { label: '纪念册', path: '/memories', heading: '把共同的时间收好', empty: '还没有双城日记' },
   ] as const;
@@ -16,7 +16,7 @@ test('SMOKE-02 四个主导航的空态与标题真实可信', async ({ page }) 
     await expect(page).toHaveURL(new RegExp(`${item.path}$`));
     await expect(page.getByRole('heading', { level: 1 })).toContainText(item.heading);
     await expect(page.getByText(item.empty)).toBeVisible();
-    await expect(page.locator('nav a[aria-current="page"]')).toContainText(item.label);
+    await expect(page.locator('.main-nav a[aria-current="page"]')).toContainText(item.label);
     await capture(page, `nav-${item.path.replace(/\//g, '')}`);
   }
 
@@ -49,7 +49,7 @@ test('SMOKE-02 主导航可键盘访问且顺序稳定', async ({ page }) => {
 test('SMOKE-02 匿名可以浏览发现，但私人页面要求登录', async ({ page }) => {
   await page.goto('/discover');
   await expect(page.getByRole('heading', { level: 1 })).toContainText('看看别人生活的城市');
-  await expect(page.getByText('还没有已审核的城市故事')).toBeVisible();
+  await expect(page.getByText('还没有符合条件的故事')).toBeVisible();
 
   await page.getByRole('navigation', { name: '主导航' }).getByRole('link', { name: /邮局/ }).click();
   await expect(page).toHaveURL(/\/auth\/login\?redirect=(%2F|\/)post-office/);

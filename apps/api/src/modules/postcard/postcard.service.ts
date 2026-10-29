@@ -5,11 +5,13 @@ import { AppError } from '../../common/errors/app-error';
 import type { AuthenticatedUser } from '../../common/http/request.types';
 import { AccountService } from '../auth/account.service';
 import { DeliveryPolicy } from '../delivery/delivery-policy.service';
+import { PassageReader } from '../passage/passage-reader.service';
 import { CityService } from '../profile/city.service';
 import type { MailProfile } from '../profile/profile-reader.service';
 import { ProfileReader } from '../profile/profile-reader.service';
 import { validatePostcardBody } from './domain/body';
 import { normalizeIdempotencyKey } from './domain/idempotency';
+import { resolvePassageRecipient } from './domain/passage-binding';
 import {
   canReadPostcardBody,
   postcardRoleFor,
@@ -45,10 +47,35 @@ export class PostcardService {
     private readonly profiles: ProfileReader,
     private readonly cities: CityService,
     private readonly delivery: DeliveryPolicy,
+    private readonly passages: PassageReader,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
-  async listRecipients(user: AuthenticatedUser): Promise<RecipientResponseDto[]> {
+  async listRecipients(
+    user: AuthenticatedUser,
+    passageId?: string,
+  ): Promise<RecipientResponseDto[]> {
+    if (passageId) {
+      const context = await this.passages.findSendContext(passageId, user.id);
+      if (!context) {
+        throw AppError.resourceNotAccessible();
+      }
+      if (!context.canSend) {
+        return [];
+      }
+      const profile = (await this.profiles.findMailProfiles([context.receiverId]))[0];
+      if (!profile || profile.receptionMode !== 'OPEN' || !profile.city) {
+        return [];
+      }
+      return [
+        {
+          id: profile.userId,
+          nickname: profile.nickname,
+          city: this.toCitySummary(profile.city),
+        },
+      ];
+    }
+
     if (this.config.postcardDemoRecipientEmails.length === 0) {
       return [];
     }
@@ -127,8 +154,34 @@ export class PostcardService {
     input: CreatePostcardDraftDto,
   ): Promise<PostcardDraftResponseDto> {
     const body = this.requireValidBody(input.body);
-    await this.assertDraftRecipientAllowed(input.recipientId);
-    const draft = await this.drafts.create(user.id, body, input.recipientId ?? null);
+
+    const passageContext = input.passageId
+      ? await this.passages.findSendContext(input.passageId, user.id)
+      : null;
+    if (input.passageId && !passageContext) {
+      throw AppError.resourceNotAccessible();
+    }
+
+    let recipientId = input.recipientId ?? null;
+    if (passageContext) {
+      const resolution = resolvePassageRecipient(
+        passageContext.receiverId,
+        input.recipientId,
+      );
+      if (!resolution.ok) {
+        throw AppError.validation(['recipient:passageMismatch']);
+      }
+      recipientId = resolution.recipientId;
+    } else {
+      await this.assertDraftRecipientAllowed(input.recipientId);
+    }
+
+    const draft = await this.drafts.create(
+      user.id,
+      body,
+      recipientId,
+      passageContext?.passageId ?? null,
+    );
     const recipient = draft.recipientId
       ? (await this.accounts.findPublicByIds([draft.recipientId]))[0] ?? null
       : null;
@@ -143,11 +196,32 @@ export class PostcardService {
     if (input.body === undefined && input.recipientId === undefined) {
       throw AppError.validation(['body:empty']);
     }
+    const draft = await this.findOwnedUnsentDraft(user, id);
     const body = input.body === undefined ? undefined : this.requireValidBody(input.body);
-    await this.assertDraftRecipientAllowed(input.recipientId);
+
+    let nextRecipientId = input.recipientId;
+    if (input.recipientId !== undefined) {
+      if (draft.passageId) {
+        const context = await this.passages.findSendContext(draft.passageId, user.id);
+        if (!context) {
+          throw AppError.resourceNotAccessible();
+        }
+        const resolution = resolvePassageRecipient(
+          context.receiverId,
+          input.recipientId,
+        );
+        if (!resolution.ok) {
+          throw AppError.validation(['recipient:passageMismatch']);
+        }
+        nextRecipientId = resolution.recipientId;
+      } else {
+        await this.assertDraftRecipientAllowed(input.recipientId);
+      }
+    }
+
     const updated = await this.drafts.updateUnsent(id, user.id, {
       ...(body !== undefined ? { body } : {}),
-      ...(input.recipientId !== undefined ? { recipientId: input.recipientId } : {}),
+      ...(nextRecipientId !== undefined ? { recipientId: nextRecipientId } : {}),
     });
     if (!updated) {
       throw AppError.resourceNotAccessible();
@@ -178,21 +252,47 @@ export class PostcardService {
     }
 
     const body = this.requireValidBody(draft.body);
-    if (!draft.recipientId) {
-      throw AppError.validation(['recipient:required']);
-    }
-    if (draft.recipientId === user.id) {
-      throw AppError.validation(['recipient:self']);
+
+    let receiverId = draft.recipientId;
+    let passageId: string | null = draft.passageId;
+
+    if (draft.passageId) {
+      const context = await this.passages.findSendContext(draft.passageId, user.id);
+      if (!context) {
+        throw AppError.resourceNotAccessible();
+      }
+      if (!context.canSend) {
+        throw AppError.passageStateConflict('这段共途当前不允许新的通信');
+      }
+      const resolution = resolvePassageRecipient(context.receiverId, draft.recipientId);
+      if (!resolution.ok) {
+        throw AppError.validation(['recipient:passageMismatch']);
+      }
+      receiverId = resolution.recipientId;
+      passageId = context.passageId;
+    } else {
+      const allowed = await this.allowedRecipientIds();
+      if (!receiverId) {
+        throw AppError.validation(['recipient:required']);
+      }
+      if (receiverId === user.id) {
+        throw AppError.validation(['recipient:self']);
+      }
+      if (!allowed.has(receiverId)) {
+        throw AppError.resourceNotAccessible();
+      }
     }
 
-    const allowed = await this.allowedRecipientIds();
-    if (!allowed.has(draft.recipientId)) {
-      throw AppError.resourceNotAccessible();
+    if (!receiverId) {
+      throw AppError.validation(['recipient:required']);
+    }
+    if (receiverId === user.id) {
+      throw AppError.validation(['recipient:self']);
     }
 
     const [senderProfile, recipientProfile] = await this.profiles.findMailProfiles([
       user.id,
-      draft.recipientId,
+      receiverId,
     ]);
     if (!senderProfile) {
       throw AppError.resourceNotAccessible();
@@ -234,7 +334,8 @@ export class PostcardService {
       draftId: draft.id,
       ownerId: user.id,
       body,
-      receiverId: draft.recipientId,
+      receiverId,
+      passageId,
       originCityId: originCity.id,
       destinationCityId: destinationCity.id,
       sentAt,
@@ -395,6 +496,7 @@ export class PostcardService {
       id: draft.id,
       recipient: recipient ? { id: recipient.id, nickname: recipient.nickname } : null,
       body: draft.body,
+      passageId: draft.passageId,
       updatedAt: draft.updatedAt.toISOString(),
     };
   }

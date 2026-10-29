@@ -17,4 +17,12 @@ export class CityRepository {
   async findById(id: string): Promise<City | null> {
     return this.prisma.city.findUnique({ where: { id } });
   }
+
+  async findManyByIds(ids: string[]): Promise<City[]> {
+    const uniqueIds = Array.from(new Set(ids));
+    if (uniqueIds.length === 0) {
+      return [];
+    }
+    return this.prisma.city.findMany({ where: { id: { in: uniqueIds } } });
+  }
 }

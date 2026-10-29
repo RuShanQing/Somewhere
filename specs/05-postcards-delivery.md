@@ -6,6 +6,8 @@
 > 实现状态（2026-10-28，TASK-004）：已实现文字草稿 CRUD、发送事务、Haversine + `min(7200, 720 + ceil(D*60/150))` 延迟、城市快照、`IN_TRANSIT → DELIVERED` Worker、草稿/幂等键防重复、在途正文保密与每日 10 张上限。
 >
 > TASK-004 的明确边界：收件人来自服务端环境变量白名单（`POSTCARD_DEMO_RECIPIENT_EMAILS`），不是正式共途/信友关系；未实现回信、`passage_id`、`reply_to_postcard_id`、模板、通知、审核/封锁处置。`RESTRICTED` 已保留为枚举并拒绝正文，但当前没有写入路径。Worker 只负责投递，不生成通知。
+>
+> TASK-008 实现状态（2026-10-29）：`postcard_drafts` 与 `postcards` 增加可空 `passage_id`；带 `passageId` 的草稿由服务端把收件人解析为共途对方，发送时强制 `PassagePolicy.canSend`（停泊 / 关闭 / 非 ACTIVE 返回 409）。无 `passageId` 的草稿继续走演示白名单，TASK-004 行为不变。回信、通知与审核处置仍未实现。
 
 ## POSTCARD-01 用例
 
@@ -23,6 +25,7 @@
 - `body`：1–2000 个 Unicode 字符（按实际字符数验证，拒绝全空白）。
 - 草稿可反复保存和删除；只允许作者访问和编辑。
 - 发出后生成 `postcards` 中不可变内容，原草稿删除或标记为已使用。
+- `passageId` 只在创建草稿时绑定，创建后不可改绑；存在 `passageId` 时收件人由服务端解析为共途对方，客户端提供的 `recipientId` 必须与之一致（否则 422），不能借草稿接口联系第三人。
 - 发送请求支持 `Idempotency-Key`；重复网络请求不可寄出多张相同信。
 - 前端预览与发送确认界面显示距离等待时间**预计值**，真正 `deliverAt` 以服务端最终响应为准。
 
@@ -94,12 +97,14 @@ IN_TRANSIT / DELIVERED ──(安全处理)──> RESTRICTED
 | GET | `/api/v1/postcards/transit` | 我发送的在途信 |
 | GET | `/api/v1/postcards/inbox` | 我有权查看的已送达信 |
 | GET | `/api/v1/postcards/:id` | 后端检查作者/收件人及送达状态 |
-| GET | `/api/v1/postcards/recipients` | TASK-004 临时白名单收件人，不含邮箱/坐标 |
+| GET | `/api/v1/postcards/recipients?passageId=` | 缺省为 TASK-004 白名单；带 `passageId` 时只返回共途对方（`canSend` 为真且可接信时），不含邮箱/坐标 |
 | GET | `/api/v1/postcards/drafts/:id` | 仅作者读取单条草稿 |
 
 输入 `recipientId / passageId` 只能作为待验证的引用，不能代替服务端权限决策。对不允许的资源使用 `RESOURCE_NOT_ACCESSIBLE`，避免泄露对象存在与否。
 
 TASK-004 的发送校验顺序：本人草稿 → 已发送幂等返回 → 正文 → 收件人非空/非本人 → 服务端白名单 → 双方资料与城市 → 接信状态 `OPEN` → 每日上限 → 事务写入。第 11 张成功寄出返回 429 `RATE_LIMITED`；失败不消耗草稿。
+
+TASK-008 的附加分支：若草稿带 `passageId`，在「本人草稿 → 已发送幂等返回」之后先解析共途发送上下文（非参与者 404），再校验 `canSend`（false → 409 `PASSAGE_STATE_CONFLICT`），收件人使用对方参与者 ID；其余城市、接信状态、每日上限与事务步骤不变。
 
 ## POSTCARD-08 验收
 

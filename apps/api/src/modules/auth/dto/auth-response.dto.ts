@@ -18,6 +18,13 @@ export class AuthSessionUserDto {
     nullable: true,
   })
   cityId!: string | null;
+
+  @ApiProperty({
+    description: '当前账号的平台角色；只有 ADMIN 可访问故事审核接口',
+    enum: ['USER', 'ADMIN'],
+    example: 'USER',
+  })
+  role!: 'USER' | 'ADMIN';
 }
 
 /** 仅 `/auth/me`（以及未来的本人设置接口）返回的本人资料，额外包含 email。 */
@@ -41,4 +48,11 @@ export class AuthUserDto {
     nullable: true,
   })
   cityId!: string | null;
+
+  @ApiProperty({
+    description: '当前账号的平台角色；只有 ADMIN 可访问故事审核接口',
+    enum: ['USER', 'ADMIN'],
+    example: 'USER',
+  })
+  role!: 'USER' | 'ADMIN';
 }

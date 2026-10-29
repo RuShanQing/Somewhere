@@ -3,10 +3,13 @@ export type ErrorCode =
   | 'REGISTRATION_CONFLICT'
   | 'AUTH_INVALID_CREDENTIALS'
   | 'AUTH_REQUIRED'
+  | 'FORBIDDEN'
   | 'ORIGIN_NOT_ALLOWED'
   | 'RATE_LIMITED'
   | 'NOT_FOUND'
   | 'RESOURCE_NOT_ACCESSIBLE'
+  | 'STORY_STATE_CONFLICT'
+  | 'PASSAGE_STATE_CONFLICT'
   | 'SERVICE_UNAVAILABLE'
   | 'INTERNAL_ERROR';
 
@@ -42,6 +45,26 @@ export class AppError extends Error {
 
   static authRequired(): AppError {
     return new AppError('AUTH_REQUIRED', 401, '需要登录后才能访问');
+  }
+
+  static forbidden(message = '没有权限执行此操作'): AppError {
+    return new AppError('FORBIDDEN', 403, message);
+  }
+
+  static storyStateConflict(message = '故事当前状态不允许此操作'): AppError {
+    return new AppError('STORY_STATE_CONFLICT', 409, message);
+  }
+
+  static storySubmissionLimitReached(): AppError {
+    return new AppError(
+      'RATE_LIMITED',
+      429,
+      '这段时间写下的故事已经够多了，请让它们先被读完',
+    );
+  }
+
+  static passageStateConflict(message = '共途当前状态不允许此操作'): AppError {
+    return new AppError('PASSAGE_STATE_CONFLICT', 409, message);
   }
 
   static originNotAllowed(): AppError {

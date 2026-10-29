@@ -44,6 +44,13 @@ export class PostcardDraftResponseDto {
   @ApiProperty({ description: '草稿正文' })
   body!: string;
 
+  @ApiPropertyOptional({
+    description: '绑定的共途 ID；未绑定为 null，创建后不可改绑',
+    type: String,
+    nullable: true,
+  })
+  passageId!: string | null;
+
   @ApiProperty({ description: '最后更新时间（UTC ISO 8601）' })
   updatedAt!: string;
 }

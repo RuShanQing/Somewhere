@@ -12,6 +12,9 @@ const FIELD_LABELS: Record<string, string> = {
   recipient: '收件人',
   senderCity: '你的城市',
   idempotencyKey: '请求标识',
+  title: '标题',
+  topicTags: '主题标签',
+  cursor: '翻页位置',
 };
 
 function describeValidationDetails(details: string[] | undefined): string | null {

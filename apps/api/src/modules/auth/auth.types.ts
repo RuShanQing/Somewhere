@@ -1,4 +1,4 @@
-import type { User } from '@prisma/client';
+import type { User, UserRole } from '@prisma/client';
 import type { AuthenticatedUser } from '../../common/http/request.types';
 
 export interface RegisterInput {
@@ -25,6 +25,7 @@ export interface AuthSessionUser {
   nickname: string;
   emailVerified: boolean;
   cityId: string | null;
+  role: UserRole;
 }
 
 export interface ResolvedSession {
@@ -38,6 +39,7 @@ export function toSessionUser(user: User): AuthSessionUser {
     nickname: user.nickname,
     emailVerified: user.emailVerifiedAt !== null,
     cityId: null,
+    role: user.role,
   };
 }
 
@@ -48,5 +50,6 @@ export function toAuthenticatedUser(user: User): AuthenticatedUser {
     email: user.emailNormalized,
     emailVerified: user.emailVerifiedAt !== null,
     cityId: null,
+    role: user.role,
   };
 }

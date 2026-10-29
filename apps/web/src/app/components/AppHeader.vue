@@ -62,6 +62,14 @@ async function handleLogout(): Promise<void> {
         </p>
         <div class="account-actions">
           <RouterLink
+            v-if="auth.isModerator"
+            class="button button-quiet"
+            :to="{ name: 'moderation' }"
+            :aria-current="route.name === 'moderation' ? 'page' : undefined"
+          >
+            审核台
+          </RouterLink>
+          <RouterLink
             class="button button-quiet"
             :to="{ name: 'settings' }"
             :aria-current="route.name === 'settings' ? 'page' : undefined"

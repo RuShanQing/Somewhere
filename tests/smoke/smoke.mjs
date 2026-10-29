@@ -352,6 +352,219 @@ async function runHttpChecks() {
   assert((await deliveredDetail.json()).body === '这是一封冒烟测试明信片。', '送达后收件人读不到正文');
   pass('邮局：草稿→寄出→在途保密→Worker 只投递一次→收件人可读');
 
+  // ---- 城市故事：草稿、审核、公开与撤回 ----
+  const storyTitle = `冒烟城市故事 ${Date.now()}`;
+  const storyBody = '雨落在旧书店的玻璃上，店里的人都没有说话，只有翻页的声音。';
+  const storyCreate = await fetch(`${apiBase}/api/v1/stories`, {
+    method: 'POST',
+    headers: { ...origin, cookie: loginSession.pair },
+    body: JSON.stringify({
+      cityId,
+      title: storyTitle,
+      body: storyBody,
+      topicTags: ['雨天', '书店'],
+    }),
+  });
+  assert(storyCreate.status === 201, `创建故事草稿返回 ${storyCreate.status}`);
+  const storyDraft = await storyCreate.json();
+  assert(storyDraft.reviewStatus === 'DRAFT', '故事草稿状态不正确');
+
+  const storySubmit = await fetch(`${apiBase}/api/v1/stories/${storyDraft.id}/submit`, {
+    method: 'POST',
+    headers: { ...origin, cookie: loginSession.pair },
+  });
+  assert(storySubmit.status === 200, `提交故事返回 ${storySubmit.status}`);
+  assert((await storySubmit.json()).reviewStatus === 'PENDING', '故事提交后不是 PENDING');
+
+  const publicBefore = await fetch(`${apiBase}/api/v1/stories`);
+  const publicBeforeBody = await publicBefore.json();
+  assert(
+    !publicBeforeBody.items.some((item) => item.id === storyDraft.id),
+    '待审核故事出现在公开列表',
+  );
+
+  const mapBefore = await fetch(`${apiBase}/api/v1/discovery/cities`);
+  assert(mapBefore.status === 200, `地图城市入口返回 ${mapBefore.status}`);
+  const mapBeforeBody = await mapBefore.json();
+  assert(
+    !mapBeforeBody.items.some((item) => item.city.id === cityId),
+    '待审核故事的城市出现在地图入口',
+  );
+
+  const normalQueue = await fetch(`${apiBase}/api/v1/moderation/queue`, {
+    headers: { cookie: loginSession.pair },
+  });
+  assert(normalQueue.status === 403, `普通用户审核队列返回 ${normalQueue.status}`);
+
+  const adminEmail = `smoke.admin.${Date.now()}@example.test`;
+  const adminRegistration = await fetch(`${apiBase}/api/v1/auth/register`, {
+    method: 'POST',
+    headers: origin,
+    body: JSON.stringify({
+      email: adminEmail,
+      password,
+      nickname: '冒烟管理员',
+      adultConfirmed: true,
+    }),
+  });
+  assert(adminRegistration.status === 201, `管理员注册返回 ${adminRegistration.status}`);
+  const adminSession = sessionCookieFrom(adminRegistration);
+
+  const grant = spawnSync('node', ['scripts/grant-admin.mjs', '--email', adminEmail], {
+    cwd: apiRoot,
+    env,
+    stdio: 'inherit',
+  });
+  assert(grant.status === 0, '管理员授予脚本失败');
+
+  const queue = await fetch(`${apiBase}/api/v1/moderation/queue`, {
+    headers: { cookie: adminSession.pair },
+  });
+  assert(queue.status === 200, `管理员审核队列返回 ${queue.status}`);
+  const queueBody = await queue.json();
+  assert(queueBody.items.some((item) => item.id === storyDraft.id), '审核队列缺少待审核故事');
+
+  const decision = await fetch(
+    `${apiBase}/api/v1/moderation/stories/${storyDraft.id}/decision`,
+    {
+      method: 'POST',
+      headers: { ...origin, cookie: adminSession.pair },
+      body: JSON.stringify({ action: 'APPROVE' }),
+    },
+  );
+  assert(decision.status === 200, `审核通过返回 ${decision.status}`);
+  assert((await decision.json()).reviewStatus === 'APPROVED', '审核通过状态不正确');
+
+  const publicAfter = await fetch(`${apiBase}/api/v1/stories`);
+  const publicAfterText = await publicAfter.text();
+  assert(publicAfter.status === 200, `公开故事列表返回 ${publicAfter.status}`);
+  const publicAfterBody = JSON.parse(publicAfterText);
+  assert(
+    publicAfterBody.items.some((item) => item.id === storyDraft.id),
+    '审核通过的故事没有出现在公开列表',
+  );
+  assert(!/"email"\s*:/.test(publicAfterText), '公开故事列表泄露 email');
+  assert(!/centroidLat|centroidLon/.test(publicAfterText), '公开故事列表泄露经纬度');
+
+  const publicDetail = await fetch(`${apiBase}/api/v1/stories/${storyDraft.id}`);
+  assert(publicDetail.status === 200, `公开故事详情返回 ${publicDetail.status}`);
+  assert((await publicDetail.json()).body === storyBody, '公开故事详情正文不正确');
+
+  const mapAfter = await fetch(`${apiBase}/api/v1/discovery/cities`);
+  const mapAfterText = await mapAfter.text();
+  assert(mapAfter.status === 200, `地图城市入口返回 ${mapAfter.status}`);
+  const mapAfterBody = JSON.parse(mapAfterText);
+  const mapEntry = mapAfterBody.items.find((item) => item.city.id === cityId);
+  assert(mapEntry, '审核通过的故事没有让城市出现在地图入口');
+  assert(
+    mapEntry.publicStoryCount === publicAfterBody.items.length,
+    `地图数量 ${mapEntry.publicStoryCount} 与故事站 ${publicAfterBody.items.length} 不一致`,
+  );
+  assert(!/"email"\s*:/.test(mapAfterText), '地图入口泄露 email');
+  assert(!/centroidLat|centroidLon/.test(mapAfterText), '地图入口泄露经纬度');
+  assert(!/authorId/.test(mapAfterText), '地图入口泄露作者 ID');
+  pass('世界记忆地图：城市入口与故事站同一数据源，响应无邮箱/坐标/作者 ID');
+
+  const withdraw = await fetch(`${apiBase}/api/v1/stories/${storyDraft.id}/withdraw`, {
+    method: 'POST',
+    headers: { ...origin, cookie: loginSession.pair },
+  });
+  assert(withdraw.status === 200, `撤回故事返回 ${withdraw.status}`);
+  const publicGone = await fetch(`${apiBase}/api/v1/stories/${storyDraft.id}`);
+  assert(publicGone.status === 404, `撤回后公开详情仍可读（${publicGone.status}）`);
+
+  const mapGone = await fetch(`${apiBase}/api/v1/discovery/cities`);
+  const mapGoneBody = await mapGone.json();
+  assert(
+    !mapGoneBody.items.some((item) => item.city.id === cityId),
+    '撤回后城市仍出现在地图入口',
+  );
+  pass('城市故事：草稿→审核→公开→撤回，地图与故事站同时消失');
+
+  // ---- 共途：停泊、归档与进行中列表 ----
+  const passageTopic = `冒烟共途 ${Date.now()}`;
+  const passageSeed = spawnSync(
+    'node',
+    [
+      'scripts/seed-passage.mjs',
+      '--email-a',
+      email,
+      '--email-b',
+      demoRecipientEmail,
+      '--topic',
+      passageTopic,
+    ],
+    { cwd: apiRoot, env, stdio: 'inherit' },
+  );
+  assert(passageSeed.status === 0, '共途 seed 脚本失败');
+
+  const anonymousPassages = await fetch(`${apiBase}/api/v1/passages`);
+  assert(anonymousPassages.status === 401, `匿名共途列表返回 ${anonymousPassages.status}`);
+
+  const passageList = await fetch(`${apiBase}/api/v1/passages`, {
+    headers: { cookie: loginSession.pair },
+  });
+  assert(passageList.status === 200, `共途列表返回 ${passageList.status}`);
+  const passageListText = await passageList.text();
+  const passageListBody = JSON.parse(passageListText);
+  const seededPassage = passageListBody.items.find((item) => item.topic === passageTopic);
+  assert(seededPassage, '共途列表缺少 seed 数据');
+  assert(seededPassage.permissions.canSend === true, '双方 ALLOW 时 canSend 应为 true');
+  assert(!/"email"\s*:/.test(passageListText), '共途列表泄露 email');
+  assert(!/centroidLat|centroidLon|receptionMode/.test(passageListText), '共途列表泄露坐标或接信状态');
+
+  const pauseResponse = await fetch(`${apiBase}/api/v1/passages/${seededPassage.id}/pause`, {
+    method: 'POST',
+    headers: { ...origin, cookie: loginSession.pair },
+  });
+  assert(pauseResponse.status === 200, `停泊返回 ${pauseResponse.status}`);
+  const pausedBody = await pauseResponse.json();
+  assert(pausedBody.me.consentState === 'PAUSED', '停泊后本人意愿不是 PAUSED');
+  assert(pausedBody.permissions.canSend === false, '停泊后 canSend 仍为 true');
+
+  const passageDraftResponse = await fetch(`${apiBase}/api/v1/postcards/drafts`, {
+    method: 'POST',
+    headers: { ...origin, cookie: loginSession.pair },
+    body: JSON.stringify({ body: '停泊后不该寄出。', passageId: seededPassage.id }),
+  });
+  assert(passageDraftResponse.status === 201, `共途草稿返回 ${passageDraftResponse.status}`);
+  const passageDraft = await passageDraftResponse.json();
+  assert(passageDraft.passageId === seededPassage.id, '草稿未保存 passageId');
+
+  const blockedPassageSend = await fetch(
+    `${apiBase}/api/v1/postcards/drafts/${passageDraft.id}/send`,
+    {
+      method: 'POST',
+      headers: {
+        ...origin,
+        cookie: loginSession.pair,
+        'Idempotency-Key': `smoke-passage-${Date.now()}`,
+      },
+    },
+  );
+  assert(blockedPassageSend.status === 409, `停泊后共途发信返回 ${blockedPassageSend.status}`);
+  assert(
+    (await blockedPassageSend.json()).code === 'PASSAGE_STATE_CONFLICT',
+    '停泊后共途发信错误码不正确',
+  );
+
+  const archiveResponse = await fetch(`${apiBase}/api/v1/passages/${seededPassage.id}/archive`, {
+    method: 'POST',
+    headers: { ...origin, cookie: loginSession.pair },
+  });
+  assert(archiveResponse.status === 200, `归档返回 ${archiveResponse.status}`);
+  assert((await archiveResponse.json()).progressStatus === 'ARCHIVED', '归档后进度不是 ARCHIVED');
+
+  const activePassages = await fetch(`${apiBase}/api/v1/passages?status=ACTIVE`, {
+    headers: { cookie: loginSession.pair },
+  });
+  const activeBody = await activePassages.json();
+  assert(
+    !activeBody.items.some((item) => item.id === seededPassage.id),
+    '归档后的共途仍出现在进行中列表',
+  );
+  pass('共途：停泊阻断 canSend，归档后退出进行中列表，响应无邮箱/坐标');
+
   const wrongPassword = await fetch(`${apiBase}/api/v1/auth/login`, {
     method: 'POST',
     headers: origin,

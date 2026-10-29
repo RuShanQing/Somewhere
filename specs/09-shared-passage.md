@@ -2,11 +2,15 @@
 
 **优先级：P0** · 主导航：共途 · 归属：PassageModule
 
+> 实现状态（2026-10-29，TASK-007）：已实现三组状态中的前两组（经历进度、每人通信意愿）、列表 / 详情、停泊 / 续程 / 完成 / 归档与 `PassagePolicy.canSend`。**未实现**邀请与关系发起、邮局 `passage_id`、信友、纪念册、通知与封锁。本文件不设计邀请环节的专项测试。
+
 ## PASSAGE-01 目标
 
 两个人因共同的主题而通信，完成一段可被保存的经历。共途不是好友列表，不是必须永久持续的聊天；可以完成、停泊或归档，也可以在双方自愿情况下重新开启下一程。
 
 **本文件定义共途业务状态与权限，不包含邀请环节的专项测试方案。**
+
+> 实现状态（2026-10-29）：TASK-007 完成三表、6 个接口、停泊 / 续程 / 完成 / 归档与 `canSend`；TASK-008 把 `PassagePolicy.canSend` 接入邮局发送链路，并在草稿与明信片上保存可空 `passage_id`。邀请 / 创建入口、信友与纪念册仍未实现。
 
 ## PASSAGE-02 共途类型与页面
 
@@ -14,7 +18,7 @@
 - `ONGOING`：围绕一个主题继续交换，但不会自动变成信友。
 - `SEASONAL`：按季节低频分享（后续增强，可在 P0 仅作为主题标签）。
 - 首页展示：正在进行的共途、当前主题、寄出的明信片、停泊 / 归档状态、已产生的共同记忆。
-- “写明信片”进入通用编辑器，携带 `passageId`；服务端仍独立检查通信许可。
+- “写明信片”进入通用编辑器，携带 `passageId`；服务端仍独立检查通信许可。TASK-008 已实现：收件人由服务端解析为共途对方，发送时强制 `PassagePolicy.canSend`。
 
 ## PASSAGE-03 将三组状态分离
 
@@ -24,6 +28,7 @@
 - `ACTIVE`：共同经历尚未完成。
 - `COMPLETED`：一次交换已按主题完成；无需继续也算成功。
 - `ARCHIVED`：不再出现在进行中列表；已授权记忆可继续阅读。
+- 归档是**经历级**状态，由任一参与者在 `ACTIVE` 或 `COMPLETED` 时触发，双方视图同时离开「进行中」；归档不删除历史、不改任何一方的 `consent_state`，也不自动公开或擦除记忆。TASK-007 按此语义实现，PASSAGE-06 中「归档本人视图」的措辞据此收敛。
 
 ### 每人当前通信意愿 `passage_participants`
 
@@ -32,6 +37,7 @@
 - `PAUSED`：本人暂时停泊；不接收新的共途互动请求。
 - `CLOSED`：不再允许新的联系；历史查看权独立判断。
 - 停泊到期**不自动**把 `PAUSED` 改成 `ALLOW`，必须经本人再次操作。
+- `CLOSED` 由后续安全处置或信友撤销产生；TASK-007 只实现只读判定与拒绝，**不提供写入口**。
 
 ### 记忆访问权限
 
@@ -51,24 +57,28 @@
 
 ## PASSAGE-05 数据模型与约束
 
-- `passages(id, topic, kind, progress_status, created_at, completed_at?, archived_at?)`
-- `passage_participants(passage_id, user_id, consent_state, paused_at?, resume_after?, last_confirmed_at?)`
-- `passage_events(id, passage_id, actor_id, event_type, created_at, metadata_redacted)`：记录改变状态的操作，禁止保存信件正文。
+- `passages(id, topic, kind, progress_status, created_at, updated_at, completed_at?, archived_at?)`
+- `passage_participants(passage_id, user_id, consent_state, paused_at?, last_confirmed_at?)`
+- `passage_events(id, passage_id, actor_id, event_type, metadata_redacted, created_at)`：记录改变状态的操作，禁止保存信件正文。
 
-建议数据库唯一键 `(passage_id,user_id)`；参与者数必须恰好为 2（由服务层 + 事务约束）。写操作保证权限检查与状态修改在同一事务中，避免并发乱序。
+数据库唯一键 `(passage_id,user_id)`；参与者数必须恰好为 2（由服务层 + 事务约束）。写操作保证权限检查与状态修改在同一事务中，避免并发乱序。`resume_after` 暂不建列：本阶段不存在自动恢复任务，避免出现无人写入、语义又被误读为「到期自动续程」的字段。
 
 ## PASSAGE-06 API（建议）
 
 | Method | URL | 规则 |
 |---|---|---|
-| GET | `/api/v1/passages` | 我参与的共途列表 |
-| GET | `/api/v1/passages/:id` | 仅本人参与者读取 |
-| POST | `/api/v1/passages/:id/pause` | 只暂停本人授权 |
+| GET | `/api/v1/passages?status=ALL\|ACTIVE\|COMPLETED\|ARCHIVED` | 我参与的共途列表；缺省 `ALL` |
+| GET | `/api/v1/passages/:id` | 仅本人参与者读取；非参与者统一 404 |
+| POST | `/api/v1/passages/:id/pause` | 只暂停本人授权；重复调用幂等 |
 | POST | `/api/v1/passages/:id/resume` | 恢复本人意愿，但不覆盖他人状态 |
-| POST | `/api/v1/passages/:id/complete` | 依据主题与双方已有贡献执行完成流程 |
-| POST | `/api/v1/passages/:id/archive` | 归档本人视图，不擅自删除对方的内容 |
+| POST | `/api/v1/passages/:id/complete` | 任一参与者可将 `ACTIVE` 置为 `COMPLETED`；不改双方许可 |
+| POST | `/api/v1/passages/:id/archive` | 经历级归档，不擅自删除对方的内容 |
 
-关系发起与双方意愿建立的产品流程将在后续单独任务实现；本轮不写其专项测试。跨模块发送权限必须通过 `PassagePolicy.canSend` 提供，不能在邮局里硬编码状态。
+关系发起与双方意愿建立的产品流程将在后续单独任务实现；本轮不写其专项测试，也**不提供** `POST /api/v1/passages`。在缺少邀请 / 接受流程时，公开创建接口会让一方替另一方表达同意，违反 PASSAGE-04.1。测试与本地演示使用非生产脚本建立两人共途。
+
+详情与列表返回本人可观察的 `permissions.canSend`，由 `PassagePolicy` 计算：查看者是参与者、恰好两名参与者、进度为 `ACTIVE`、双方均为 `ALLOW` 时才为 true。记忆可见性不参与该判定，也不由 `progress_status` 推导。
+
+跨模块发送权限必须通过 `PassagePolicy.canSend` 提供，不能在邮局里硬编码状态。TASK-008 已接入邮局：由 `PassageReader.findSendContext()` 统一解析参与者与许可，`PostcardModule` 不直接访问共途表。
 
 ## PASSAGE-07 异常
 

@@ -14,6 +14,11 @@ interface OpenApiOperation {
     string,
     { content?: Record<string, { schema?: { $ref?: string } }> }
   >;
+  parameters?: Array<{
+    name?: string;
+    in?: string;
+    schema?: { $ref?: string };
+  }>;
 }
 
 interface OpenApiDocument {
@@ -79,6 +84,21 @@ try {
     '/api/v1/postcards/transit',
     '/api/v1/postcards/inbox',
     '/api/v1/postcards/{id}',
+    '/api/v1/stories',
+    '/api/v1/stories/{id}',
+    '/api/v1/stories/mine',
+    '/api/v1/stories/mine/{id}',
+    '/api/v1/stories/{id}/submit',
+    '/api/v1/stories/{id}/withdraw',
+    '/api/v1/discovery/cities',
+    '/api/v1/passages',
+    '/api/v1/passages/{id}',
+    '/api/v1/passages/{id}/pause',
+    '/api/v1/passages/{id}/resume',
+    '/api/v1/passages/{id}/complete',
+    '/api/v1/passages/{id}/archive',
+    '/api/v1/moderation/queue',
+    '/api/v1/moderation/stories/{id}/decision',
   ];
   for (const path of expectedPaths) {
     if (!document.paths[path]) {
@@ -104,6 +124,9 @@ try {
   if (/"email"\s*:/.test(sessionUserSchema)) {
     fail('AuthSessionUserDto 不能包含 email');
   }
+  if (!/"role"\s*:/.test(sessionUserSchema) || !sessionUserSchema.includes('ADMIN')) {
+    fail('AuthSessionUserDto 必须包含 USER/ADMIN 角色');
+  }
 
   const authUserSchema = JSON.stringify(document.components?.schemas?.AuthUserDto ?? {});
   if (!authUserSchema.includes('"nickname"') || !authUserSchema.includes('"emailVerified"')) {
@@ -111,6 +134,9 @@ try {
   }
   if (!/"email"\s*:/.test(authUserSchema)) {
     fail('AuthUserDto 必须包含本人 email');
+  }
+  if (!/"role"\s*:/.test(authUserSchema) || !authUserSchema.includes('ADMIN')) {
+    fail('AuthUserDto 必须包含 USER/ADMIN 角色');
   }
   if (/password/i.test(`${sessionUserSchema}${authUserSchema}`)) {
     fail('认证响应契约不能包含任何密码字段');
@@ -172,6 +198,108 @@ try {
   );
   if (/"email"\s*:/.test(draftSchema)) {
     fail('草稿契约不能包含 email');
+  }
+  if (!draftSchema.includes('"passageId"')) {
+    fail('草稿契约必须包含可空 passageId，供共途上下文回显');
+  }
+
+  const createDraftSchema = JSON.stringify(
+    document.components?.schemas?.CreatePostcardDraftDto ?? {},
+  );
+  if (!createDraftSchema.includes('"passageId"')) {
+    fail('创建草稿契约必须接受可选 passageId');
+  }
+
+  const recipientsOperation = document.paths['/api/v1/postcards/recipients']?.get as
+    | OpenApiOperation
+    | undefined;
+  const passageQuery = recipientsOperation?.parameters?.find(
+    (parameter) => parameter.in === 'query' && parameter.name === 'passageId',
+  );
+  if (!passageQuery) {
+    fail('收件人契约必须支持可选 passageId 查询参数');
+  }
+
+  const publicListSchema = JSON.stringify(
+    document.components?.schemas?.PublicStoryListDto ?? {},
+  );
+  const publicDetailSchema = JSON.stringify(
+    document.components?.schemas?.PublicStoryDetailDto ?? {},
+  );
+  const publicStorySchema = `${publicListSchema}${publicDetailSchema}`;
+  if (!publicStorySchema.includes('"authorNickname"') || !publicStorySchema.includes('"publishedAt"')) {
+    fail('公开故事契约缺少作者昵称或公开时间');
+  }
+  if (/"email"\s*:/.test(publicStorySchema) || /authorId|centroidLat|centroidLon/.test(publicStorySchema)) {
+    fail('公开故事契约不能包含 email、作者 ID 或经纬度');
+  }
+  if (/reviewNote|internalNote/.test(publicStorySchema)) {
+    fail('公开故事契约不能包含审核内部备注');
+  }
+
+  const cityMemorySchema = JSON.stringify({
+    list: document.components?.schemas?.CityMemoryListDto ?? {},
+    item: document.components?.schemas?.CityMemoryItemDto ?? {},
+    city: document.components?.schemas?.DiscoveryCityDto ?? {},
+  });
+  if (!cityMemorySchema.includes('"publicStoryCount"') || !cityMemorySchema.includes('"latestPublishedAt"')) {
+    fail('世界记忆地图城市聚合契约缺少公开数量或最近公开时间');
+  }
+  if (/centroidLat|centroidLon|authorId|"email"/.test(cityMemorySchema)) {
+    fail('世界记忆地图契约不能包含坐标、作者 ID 或 email');
+  }
+
+  const ownStorySchema = JSON.stringify(document.components?.schemas?.OwnStoryDto ?? {});
+  if (!ownStorySchema.includes('"reviewStatus"') || !ownStorySchema.includes('"body"')) {
+    fail('作者故事契约缺少审核状态或正文');
+  }
+  if (/"email"\s*:/.test(ownStorySchema)) {
+    fail('作者故事契约不能包含 email');
+  }
+
+  const moderationSchema = JSON.stringify(
+    document.components?.schemas?.ModerationStoryItemDto ?? {},
+  );
+  if (!moderationSchema.includes('"body"') || !moderationSchema.includes('"authorNickname"')) {
+    fail('审核队列契约缺少正文或作者昵称');
+  }
+  if (/"email"\s*:/.test(moderationSchema) || /centroidLat|centroidLon/.test(moderationSchema)) {
+    fail('审核队列契约不能包含 email 或经纬度');
+  }
+
+  const passageSchema = JSON.stringify({
+    summary: document.components?.schemas?.PassageSummaryDto ?? {},
+    self: document.components?.schemas?.PassageSelfDto ?? {},
+    counterpart: document.components?.schemas?.PassageCounterpartDto ?? {},
+    permissions: document.components?.schemas?.PassagePermissionsDto ?? {},
+  });
+  if (
+    !passageSchema.includes('"progressStatus"') ||
+    !passageSchema.includes('"consentState"') ||
+    !passageSchema.includes('"canSend"')
+  ) {
+    fail('共途契约缺少进度、意愿或许可字段');
+  }
+  if (
+    /"email"\s*:/.test(passageSchema) ||
+    /centroidLat|centroidLon|receptionMode|password|session/i.test(passageSchema)
+  ) {
+    fail('共途契约不能包含 email、坐标、接信状态、密码或会话字段');
+  }
+  if (!/ACTIVE/.test(passageSchema) || !/COMPLETED/.test(passageSchema) || !/ARCHIVED/.test(passageSchema)) {
+    fail('共途契约缺少 ACTIVE/COMPLETED/ARCHIVED 进度状态');
+  }
+
+  const passageDetailSchema = responseSchemaName(document, '/api/v1/passages/{id}', 'get', '200');
+  if (passageDetailSchema !== 'PassageSummaryDto') {
+    fail(`共途详情响应必须使用 PassageSummaryDto，实际为 ${passageDetailSchema}`);
+  }
+
+  const decisionSchema = JSON.stringify(
+    document.components?.schemas?.StoryDecisionDto ?? {},
+  );
+  if (!decisionSchema.includes('APPROVE') || !decisionSchema.includes('REJECT') || !decisionSchema.includes('REMOVE')) {
+    fail('故事决策契约缺少 APPROVE/REJECT/REMOVE');
   }
 
   const committed = readFileSync(clientPath, 'utf8').replace(/\r\n/g, '\n');

@@ -65,6 +65,9 @@ export default defineConfig({
         AUTH_LOGIN_MAX_PER_IDENTITY: '1000',
         POSTCARD_DEMO_RECIPIENT_EMAILS: demoRecipientEmail,
         POSTCARD_MAX_SENDS_PER_DAY: '10',
+        STORY_MAX_ACTIVE_PER_CITY: '50',
+        STORY_MAX_SUBMISSIONS_PER_WINDOW: '3',
+        STORY_SUBMISSION_WINDOW_DAYS: '7',
       },
     },
     {

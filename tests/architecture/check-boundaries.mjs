@@ -17,6 +17,9 @@ const PUBLIC_MODULE_API = [
   /\/city\.service$/,
   /\/profile-reader\.service$/,
   /\/delivery-policy\.service$/,
+  /\/approved-story-reader\.service$/,
+  /\/passage-policy\.service$/,
+  /\/passage-reader\.service$/,
 ];
 
 function walk(dir, files = []) {

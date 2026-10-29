@@ -21,10 +21,48 @@ export type PostcardInboxItem = components['schemas']['InboxItemDto'];
 export type PostcardTransitItem = components['schemas']['TransitItemDto'];
 export type CreatePostcardDraftInput = components['schemas']['CreatePostcardDraftDto'];
 export type UpdatePostcardDraftInput = components['schemas']['UpdatePostcardDraftDto'];
+export type StoryCity = components['schemas']['StoryCityDto'];
+export type OwnStory = components['schemas']['OwnStoryDto'];
+export type PublicStoryItem = components['schemas']['PublicStoryItemDto'];
+export type PublicStoryList = components['schemas']['PublicStoryListDto'];
+export type PublicStoryDetail = components['schemas']['PublicStoryDetailDto'];
+export type ModerationStoryItem = components['schemas']['ModerationStoryItemDto'];
+export type ModerationQueue = components['schemas']['ModerationQueueDto'];
+export type CreateStoryInput = components['schemas']['CreateStoryDto'];
+export type UpdateStoryInput = components['schemas']['UpdateStoryDto'];
+export type StoryDecisionInput = components['schemas']['StoryDecisionDto'];
+export type StoryDecisionResult = components['schemas']['StoryDecisionResponseDto'];
+export type DiscoveryCity = components['schemas']['DiscoveryCityDto'];
+export type CityMemoryItem = components['schemas']['CityMemoryItemDto'];
+export type CityMemoryList = components['schemas']['CityMemoryListDto'];
+export type PassageSummary = components['schemas']['PassageSummaryDto'];
+export type PassageList = components['schemas']['PassageListDto'];
+export type PassageProgressStatus = PassageSummary['progressStatus'];
+export type PassageConsentState = PassageSummary['me']['consentState'];
 
 export interface PostcardListParams {
   limit?: number;
   offset?: number;
+}
+
+export interface StoryListParams {
+  cityId?: string;
+  topic?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface ModerationQueueParams {
+  cursor?: string;
+  limit?: number;
+}
+
+export interface CityMemoryParams {
+  topic?: string;
+}
+
+export interface PassageListParams {
+  status?: 'ALL' | PassageProgressStatus;
 }
 
 /** 服务端错误码在前端唯一映射；未知状态仍保留 HTTP 状态码用于诊断。 */
@@ -64,7 +102,7 @@ export interface ApiClient {
   profileMe(): Promise<Profile>;
   updateProfile(input: UpdateProfileInput): Promise<Profile>;
   postOfficeSummary(): Promise<PostOfficeSummary>;
-  postcardRecipients(): Promise<PostcardRecipient[]>;
+  postcardRecipients(passageId?: string): Promise<PostcardRecipient[]>;
   postcardDrafts(params?: PostcardListParams): Promise<PostcardDraft[]>;
   postcardDraft(id: string): Promise<PostcardDraft>;
   createPostcardDraft(input: CreatePostcardDraftInput): Promise<PostcardDraft>;
@@ -74,6 +112,24 @@ export interface ApiClient {
   transitPostcards(params?: PostcardListParams): Promise<PostcardTransitItem[]>;
   inboxPostcards(params?: PostcardListParams): Promise<PostcardInboxItem[]>;
   postcardDetail(id: string): Promise<PostcardDetail>;
+  stories(params?: StoryListParams): Promise<PublicStoryList>;
+  storyDetail(id: string): Promise<PublicStoryDetail>;
+  cityMemories(params?: CityMemoryParams): Promise<CityMemoryList>;
+  myStories(): Promise<OwnStory[]>;
+  myStory(id: string): Promise<OwnStory>;
+  createStory(input: CreateStoryInput): Promise<OwnStory>;
+  updateStory(id: string, input: UpdateStoryInput): Promise<OwnStory>;
+  deleteStory(id: string): Promise<void>;
+  submitStory(id: string): Promise<OwnStory>;
+  withdrawStory(id: string): Promise<OwnStory>;
+  moderationQueue(params?: ModerationQueueParams): Promise<ModerationQueue>;
+  decideStory(id: string, input: StoryDecisionInput): Promise<StoryDecisionResult>;
+  passages(params?: PassageListParams): Promise<PassageList>;
+  passageDetail(id: string): Promise<PassageSummary>;
+  pausePassage(id: string): Promise<PassageSummary>;
+  resumePassage(id: string): Promise<PassageSummary>;
+  completePassage(id: string): Promise<PassageSummary>;
+  archivePassage(id: string): Promise<PassageSummary>;
 }
 
 interface RequestOptions {
@@ -138,8 +194,10 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     updateProfile: (input) =>
       request<Profile>('/api/v1/profile/me', { method: 'PATCH', body: input }),
     postOfficeSummary: () => request<PostOfficeSummary>('/api/v1/post-office/summary'),
-    postcardRecipients: () =>
-      request<PostcardRecipient[]>('/api/v1/postcards/recipients'),
+    postcardRecipients: (passageId) =>
+      request<PostcardRecipient[]>(
+        withQuery('/api/v1/postcards/recipients', passageId ? { passageId } : undefined),
+      ),
     postcardDrafts: (params) =>
       request<PostcardDraft[]>(withListQuery('/api/v1/postcards/drafts', params)),
     postcardDraft: (id) =>
@@ -169,7 +227,75 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       request<PostcardInboxItem[]>(withListQuery('/api/v1/postcards/inbox', params)),
     postcardDetail: (id) =>
       request<PostcardDetail>(`/api/v1/postcards/${encodeURIComponent(id)}`),
+    stories: (params) =>
+      request<PublicStoryList>(withQuery('/api/v1/stories', params)),
+    storyDetail: (id) =>
+      request<PublicStoryDetail>(`/api/v1/stories/${encodeURIComponent(id)}`),
+    cityMemories: (params) =>
+      request<CityMemoryList>(withQuery('/api/v1/discovery/cities', params)),
+    myStories: () => request<OwnStory[]>('/api/v1/stories/mine'),
+    myStory: (id) =>
+      request<OwnStory>(`/api/v1/stories/mine/${encodeURIComponent(id)}`),
+    createStory: (input) =>
+      request<OwnStory>('/api/v1/stories', { method: 'POST', body: input }),
+    updateStory: (id, input) =>
+      request<OwnStory>(`/api/v1/stories/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: input,
+      }),
+    deleteStory: (id) =>
+      request<void>(`/api/v1/stories/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    submitStory: (id) =>
+      request<OwnStory>(`/api/v1/stories/${encodeURIComponent(id)}/submit`, {
+        method: 'POST',
+      }),
+    withdrawStory: (id) =>
+      request<OwnStory>(`/api/v1/stories/${encodeURIComponent(id)}/withdraw`, {
+        method: 'POST',
+      }),
+    moderationQueue: (params) =>
+      request<ModerationQueue>(withQuery('/api/v1/moderation/queue', params)),
+    decideStory: (id, input) =>
+      request<StoryDecisionResult>(
+        `/api/v1/moderation/stories/${encodeURIComponent(id)}/decision`,
+        { method: 'POST', body: input },
+      ),
+    passages: (params) =>
+      request<PassageList>(withQuery('/api/v1/passages', params)),
+    passageDetail: (id) =>
+      request<PassageSummary>(`/api/v1/passages/${encodeURIComponent(id)}`),
+    pausePassage: (id) =>
+      request<PassageSummary>(`/api/v1/passages/${encodeURIComponent(id)}/pause`, {
+        method: 'POST',
+      }),
+    resumePassage: (id) =>
+      request<PassageSummary>(`/api/v1/passages/${encodeURIComponent(id)}/resume`, {
+        method: 'POST',
+      }),
+    completePassage: (id) =>
+      request<PassageSummary>(`/api/v1/passages/${encodeURIComponent(id)}/complete`, {
+        method: 'POST',
+      }),
+    archivePassage: (id) =>
+      request<PassageSummary>(`/api/v1/passages/${encodeURIComponent(id)}/archive`, {
+        method: 'POST',
+      }),
   };
+}
+
+/** 只拼接字符串 / 数字查询参数；空字符串与 undefined 视为未提供。 */
+function withQuery(path: string, params?: object): string {
+  if (!params) {
+    return path;
+  }
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if ((typeof value === 'string' && value !== '') || typeof value === 'number') {
+      search.set(key, String(value));
+    }
+  }
+  const suffix = search.toString();
+  return suffix ? `${path}?${suffix}` : path;
 }
 
 function withListQuery(path: string, params?: PostcardListParams): string {

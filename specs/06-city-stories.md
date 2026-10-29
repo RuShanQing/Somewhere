@@ -2,6 +2,8 @@
 
 **优先级：P0** · 主导航：发现 · 归属：StoryModule / DiscoveryModule
 
+> 实现状态（2026-10-29）：TASK-005 已实现故事草稿、提交审核、管理员通过/驳回/下架、公开故事站与详情、城市容量与提交配额。本文件的数值与状态规则仍是当前合同；显示城市 / 上地图 / 接受共途邀请开关、匿名作者、30 天轮换等暂缓项见 [14-story-deferred-scope.md](14-story-deferred-scope.md)，仍未实现。
+
 ## STORY-01 目标与产品形态
 
 故事站是一个容量有限、经过审核、由真实生活片段组成的公共故事池。它**不是公开动态流**：不显示社交热度排行榜、点赞竞赛、无限刷新的个人动态。
@@ -36,20 +38,26 @@ ACTIVE ─→ ARCHIVED（容量轮换）/ REMOVED（作者撤回或安全下架�
 
 约束：
 - 标题 1–80 字符；正文 20–3000 字符。
-- 必须有城市级归属，但作者可以单独隐藏自己的个人城市信息。
+- 必须有城市级归属，但作者可以单独隐藏自己的个人城市信息（该可见性开关在 TASK-005 暂缓，见 [14-story-deferred-scope.md](14-story-deferred-scope.md)）。
 - 发布授权必须是显式操作；私信和私人日记不会成为自动公开来源。
 - 公开作者显示昵称或匿名标识（由授权决定），不显示邮箱、收件地址、精确坐标。
 
 ## STORY-05 API
 
 - `GET /api/v1/stories?cityId=&topic=&cursor=`：仅活跃审核通过，支持分页。
-- `GET /api/v1/stories/:id`：公开可见的详情。
-- `POST /api/v1/stories`：作者提交，初始 PENDING。
+- `GET /api/v1/stories/:id`：公开可见的详情；非公开统一 404。
+- `POST /api/v1/stories`：作者创建草稿，初始 `DRAFT`。
 - `GET /api/v1/stories/mine`：作者查看自己的各状态记录。
-- `POST /api/v1/stories/:id/withdraw`：作者撤回公开授权。
-- 审核端点属于 [12-safety-and-moderation.md](12-safety-and-moderation.md)，需审核员身份。
+- `GET /api/v1/stories/mine/:id`：作者查看自己的单条故事（包含未公开内容）。
+- `PATCH /api/v1/stories/:id`：作者编辑 `DRAFT` / `REJECTED` 状态的故事。
+- `POST /api/v1/stories/:id/submit`：作者把 `DRAFT` / `REJECTED` 提交为 `PENDING`。
+- `DELETE /api/v1/stories/:id`：作者删除 `DRAFT`；已提交故事只能撤回。
+- `POST /api/v1/stories/:id/withdraw`：作者撤回公开授权；`PENDING` / `APPROVED → REMOVED`。
+- 审核端点属于 [12-safety-and-moderation.md](12-safety-and-moderation.md)，需管理员（`ADMIN`）身份；TASK-005 由 StoryModule 提供最小审核控制器，通用 SafetyModule 后续再抽。角色定义见 [02-auth.md](02-auth.md) 的 AUTH-08。
 
-API 搜索缓存必须以公开状态为准；撤回/下架后的缓存需要失效或有受控短时效与严格权限保护。
+作者接口只允许操作本人故事；跨用户统一返回 404 `RESOURCE_NOT_ACCESSIBLE`。标题、正文、标签和状态转移在服务端重新校验；客户端不能提交 `authorId`、`reviewStatus`、`publishedAt` 等字段。
+
+API 搜索缓存必须以公开状态为准；撤回/下架后的缓存需要失效或有受控短时效与严格权限保护。TASK-005 不引入缓存层。
 
 ## STORY-06 安全与审核
 
