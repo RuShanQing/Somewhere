@@ -52,6 +52,23 @@ export class PassageRepository {
     });
   }
 
+  /** 只回答两人是否至少共同完成过一段共途；不暴露主题、状态或事件。 */
+  async hasCompletedBetween(firstUserId: string, secondUserId: string): Promise<boolean> {
+    if (firstUserId === secondUserId) {
+      return false;
+    }
+    const count = await this.prisma.passage.count({
+      where: {
+        completedAt: { not: null },
+        AND: [
+          { participants: { some: { userId: firstUserId } } },
+          { participants: { some: { userId: secondUserId } } },
+        ],
+      },
+    });
+    return count > 0;
+  }
+
   /** 仅供测试夹具与后续邀请流程使用；当前没有 HTTP 创建入口。 */
   async createForPair(input: CreatePassageInput): Promise<PassageRecord> {
     return this.prisma.passage.create({

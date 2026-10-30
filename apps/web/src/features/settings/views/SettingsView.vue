@@ -4,11 +4,13 @@ import { useRouter } from 'vue-router';
 import {
   api,
   ApiError,
+  type BlockedUser,
   type CitySummary,
   type Profile,
   type ReceptionMode,
 } from '../../../shared/api/client';
 import { toFriendlyAuthMessage } from '../../../shared/api/error-message';
+import { formatDateTime } from '../../../shared/format/postcard';
 import PageHeader from '../../../shared/ui/PageHeader.vue';
 import { useAuthStore } from '../../../shared/stores/auth';
 
@@ -39,6 +41,10 @@ const isSaving = ref(false);
 const loadError = ref<string | null>(null);
 const saveError = ref<string | null>(null);
 const savedMessage = ref<string | null>(null);
+const blockedUsers = ref<BlockedUser[]>([]);
+const unblockPendingId = ref<string | null>(null);
+const blockError = ref<string | null>(null);
+const blockNotice = ref<string | null>(null);
 
 const cityHint = computed(() =>
   form.cityId
@@ -58,9 +64,14 @@ async function loadSettings(): Promise<void> {
   isLoading.value = true;
   loadError.value = null;
   try {
-    const [currentProfile, cityList] = await Promise.all([api.profileMe(), api.cities()]);
+    const [currentProfile, cityList, blocked] = await Promise.all([
+      api.profileMe(),
+      api.cities(),
+      api.blockedUsers(),
+    ]);
     profile.value = currentProfile;
     cities.value = cityList;
+    blockedUsers.value = blocked.items;
     form.nickname = currentProfile.nickname;
     form.cityId = currentProfile.city?.id ?? '';
     form.receptionMode = currentProfile.receptionMode;
@@ -107,6 +118,27 @@ async function saveSettings(): Promise<void> {
     saveError.value = toFriendlyAuthMessage(error);
   } finally {
     isSaving.value = false;
+  }
+}
+
+async function unblock(userId: string): Promise<void> {
+  if (unblockPendingId.value) {
+    return;
+  }
+  unblockPendingId.value = userId;
+  blockError.value = null;
+  blockNotice.value = null;
+  try {
+    await api.unblockUser(userId);
+    blockedUsers.value = blockedUsers.value.filter((item) => item.userId !== userId);
+    blockNotice.value = '已解除封锁。新的通信可以按原有许可恢复。';
+  } catch (error) {
+    if (await handleUnauthorized(error)) {
+      return;
+    }
+    blockError.value = toFriendlyAuthMessage(error);
+  } finally {
+    unblockPendingId.value = null;
   }
 }
 
@@ -178,5 +210,38 @@ onMounted(loadSettings);
         <span v-if="profile" class="field-hint">当前昵称：{{ profile.nickname }}</span>
       </div>
     </form>
+
+    <section
+      v-if="!isLoading && !loadError"
+      class="section-card safety-actions"
+      aria-labelledby="settings-blocked-title"
+    >
+      <h2 id="settings-blocked-title">已封锁的用户</h2>
+      <p class="field-hint">
+        封锁会停止双方新的通信，但不会删除已经送达的信件或共同经历。解除后，新的通信可以按原有许可恢复。
+      </p>
+
+      <p v-if="blockNotice" class="form-success" role="status">{{ blockNotice }}</p>
+      <p v-if="blockError" class="form-alert" role="alert">{{ blockError }}</p>
+
+      <ul v-if="blockedUsers.length > 0" class="blocked-user-list">
+        <li v-for="user in blockedUsers" :key="user.userId" class="blocked-user-item">
+          <div>
+            <strong>{{ user.nickname }}</strong>
+            <span class="field-hint">封锁于 {{ formatDateTime(user.blockedAt) }}</span>
+          </div>
+          <button
+            class="button button-quiet"
+            type="button"
+            :disabled="unblockPendingId === user.userId"
+            @click="unblock(user.userId)"
+          >
+            {{ unblockPendingId === user.userId ? '正在解除…' : '解除封锁' }}
+          </button>
+        </li>
+      </ul>
+
+      <p v-else class="empty-description">还没有封锁任何用户。</p>
+    </section>
   </div>
 </template>

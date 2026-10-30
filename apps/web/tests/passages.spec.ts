@@ -21,6 +21,7 @@ function passage(overrides: Partial<PassageSummary> = {}): PassageSummary {
     archivedAt: null,
     me: { consentState: 'ALLOW', pausedAt: null },
     counterpart: {
+      id: 'user-2',
       nickname: '虚构旅人',
       city: { id: 'city-1', name: '虚构城市', countryCode: 'CN' },
       consentState: 'ALLOW',

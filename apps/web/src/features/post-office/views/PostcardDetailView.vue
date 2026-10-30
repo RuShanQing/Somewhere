@@ -1,17 +1,30 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { api, ApiError, type PostcardDetail } from '../../../shared/api/client';
+import {
+  api,
+  ApiError,
+  type BlockedUser,
+  type PostcardDetail,
+} from '../../../shared/api/client';
 import { toFriendlyAuthMessage } from '../../../shared/api/error-message';
 import { formatDateTime, postcardStatusLabel } from '../../../shared/format/postcard';
+import { useAuthStore } from '../../../shared/stores/auth';
 import PageHeader from '../../../shared/ui/PageHeader.vue';
 
 const route = useRoute();
 const router = useRouter();
+const auth = useAuthStore();
 const detail = ref<PostcardDetail | null>(null);
 const isLoading = ref(true);
 const notFound = ref(false);
 const loadError = ref<string | null>(null);
+const blockedUsers = ref<BlockedUser[]>([]);
+const blockStateError = ref<string | null>(null);
+const isBlockConfirming = ref(false);
+const blockPending = ref(false);
+const blockNotice = ref<string | null>(null);
+const blockError = ref<string | null>(null);
 
 const postcardId = computed(() =>
   typeof route.params.id === 'string' ? route.params.id : '',
@@ -25,6 +38,63 @@ const statusLabel = computed(() =>
   detail.value ? postcardStatusLabel(detail.value.status) : '',
 );
 const isDelivered = computed(() => detail.value?.status === 'DELIVERED');
+const viewerId = computed(() => auth.user?.id ?? '');
+const otherUser = computed(() => {
+  if (!detail.value || !viewerId.value) {
+    return null;
+  }
+  if (detail.value.sender.id === viewerId.value) {
+    return detail.value.receiver;
+  }
+  if (detail.value.receiver.id === viewerId.value) {
+    return detail.value.sender;
+  }
+  return null;
+});
+const isBlocked = computed(() =>
+  Boolean(
+    otherUser.value &&
+      blockedUsers.value.some((item) => item.userId === otherUser.value?.id),
+  ),
+);
+
+async function loadBlockState(): Promise<void> {
+  blockStateError.value = null;
+  try {
+    const result = await api.blockedUsers();
+    blockedUsers.value = result.items;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      return;
+    }
+    blockStateError.value = toFriendlyAuthMessage(error);
+  }
+}
+
+async function confirmBlock(): Promise<void> {
+  if (!otherUser.value || blockPending.value) {
+    return;
+  }
+  blockPending.value = true;
+  blockError.value = null;
+  blockNotice.value = null;
+  try {
+    await api.blockUser({ userId: otherUser.value.id });
+    await loadBlockState();
+    isBlockConfirming.value = false;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      await router.replace({
+        name: 'login',
+        query: { redirect: `/postcards/${postcardId.value}` },
+      });
+      return;
+    }
+    blockError.value = toFriendlyAuthMessage(error);
+  } finally {
+    blockPending.value = false;
+  }
+}
 
 async function loadPostcard(): Promise<void> {
   isLoading.value = true;
@@ -50,7 +120,10 @@ async function loadPostcard(): Promise<void> {
   }
 }
 
-onMounted(loadPostcard);
+onMounted(() => {
+  void loadPostcard();
+  void loadBlockState();
+});
 </script>
 
 <template>
@@ -112,6 +185,60 @@ onMounted(loadPostcard);
       <div class="form-actions detail-actions">
         <RouterLink class="button button-quiet" :to="{ name: 'post-office' }">返回邮局</RouterLink>
       </div>
+
+      <section class="safety-actions" aria-labelledby="postcard-safety-title">
+        <h2 id="postcard-safety-title">安全</h2>
+
+        <p v-if="blockStateError" class="form-alert" role="alert">{{ blockStateError }}</p>
+        <template v-else-if="otherUser">
+          <p v-if="isBlocked" class="form-status" role="status">
+            你已封锁这位用户。双方新的通信已经停止，已送达的信件仍会保留；可以在设置中解除。
+          </p>
+
+          <template v-else>
+            <p class="field-hint">
+              封锁会停止双方新的通信，不会删除已经送达的信件；解除后可以恢复新的通信。
+            </p>
+            <button
+              class="button button-quiet"
+              type="button"
+              :disabled="blockPending"
+              @click="isBlockConfirming = true"
+            >
+              封锁这位用户
+            </button>
+
+            <div v-if="isBlockConfirming" class="send-confirm">
+              <p class="send-confirm-title">确认封锁 {{ otherUser.nickname }}？</p>
+              <p class="field-hint">
+                封锁后，双方都不能再寄新的明信片或继续共途通信。可以在设置中解除。
+              </p>
+              <div class="form-actions">
+                <button
+                  class="button"
+                  type="button"
+                  :disabled="blockPending"
+                  @click="confirmBlock"
+                >
+                  {{ blockPending ? '正在封锁…' : '确认封锁' }}
+                </button>
+                <button
+                  class="button button-quiet"
+                  type="button"
+                  :disabled="blockPending"
+                  @click="isBlockConfirming = false"
+                >
+                  先不封锁
+                </button>
+              </div>
+            </div>
+          </template>
+
+          <p v-if="blockNotice" class="form-success" role="status">{{ blockNotice }}</p>
+          <p v-if="blockError" class="form-alert" role="alert">{{ blockError }}</p>
+          <RouterLink class="delivery-link" :to="{ name: 'settings' }">前往设置</RouterLink>
+        </template>
+      </section>
     </article>
   </div>
 </template>

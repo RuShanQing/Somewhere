@@ -689,6 +689,48 @@ input {
   margin-top: 12px;
 }
 
+.safety-actions {
+  margin-top: 20px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+.safety-actions h2 {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+
+.blocked-user-list {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.blocked-user-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.blocked-user-item > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+@media (max-width: 560px) {
+  .blocked-user-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 .letter-card {
   padding: clamp(24px, 4vw, 36px);
 }
@@ -1189,6 +1231,48 @@ input {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+/* ---- 信友 ---- */
+.penpal-card {
+  cursor: default;
+}
+
+.penpal-card:hover {
+  border-color: var(--line);
+}
+
+.penpal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* ---- 个人记忆 ---- */
+.memory-form {
+  margin-bottom: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.memory-form h3 {
+  font-size: 16px;
+}
+
+.memory-form .form-field textarea {
+  min-height: 140px;
+}
+
+.memory-body {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.8;
+}
+
+.memory-list {
+  margin-top: 8px;
 }
 
 @media (max-width: 560px) {

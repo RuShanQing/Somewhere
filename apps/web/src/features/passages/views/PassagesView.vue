@@ -32,6 +32,15 @@ onMounted(() => {
 
       <template v-else>
         <SectionCard
+          title="信友"
+          description="信友是双方同意的持续通信许可；完成共途不会自动成为信友，任一方都可以随时撤销。"
+        >
+          <RouterLink class="button button-quiet" :to="{ name: 'penpals' }">
+            查看我的信友
+          </RouterLink>
+        </SectionCard>
+
+        <SectionCard
           title="正在进行"
           :badge="String(groups.active.length)"
           description="每一段共途都保留自己的进度与许可；停泊只影响新的通信行为。"

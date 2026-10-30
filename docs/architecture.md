@@ -1,6 +1,6 @@
 # Somewhere · 工程架构（目标架构）
 
-状态：**目标架构 + TASK-001～TASK-008 已落地的最小切片**。`apps/web`、`apps/api`、`packages/api-client`、`users`/`sessions`/`cities`/`profiles`/`postcard_drafts`/`postcards`/`stories`/`story_review_actions`/`passages`/`passage_participants`/`passage_events`、认证 API、城市目录、最小资料、邮局三栏、明信片草稿/发送/Worker 投递、城市故事草稿/提交/管理员审核/公开故事站、世界记忆地图业务入口、共途状态与邮局通信许可接入已完成；共途邀请、信友、纪念册、通知、举报与封锁仍是设计，仓库中不存在对应业务实现。技术栈以本科毕设、Web 优先、单人可持续维护为原则。本文是架构约束，不是地图视觉实现说明。
+状态：**目标架构 + TASK-001～TASK-011 已落地的最小切片 + TASK-012 已确认范围**。`apps/web`、`apps/api`、`packages/api-client`、`users`/`sessions`/`cities`/`profiles`/`postcard_drafts`/`postcards`/`stories`/`story_review_actions`/`passages`/`passage_participants`/`passage_events`/`user_blocks`/`penpal_consents`/`personal_memories`、认证 API、城市目录、最小资料、邮局三栏、明信片草稿/发送/Worker 投递、城市故事草稿/提交/管理员审核/公开故事站、世界记忆地图业务入口、共途状态与邮局通信许可接入、最小封锁、双向信友与个人记忆已完成；共途邀请/创建、双城日记、共同手帐、通知、举报、完整安全处置与角色扩展仍是设计，仓库中不存在对应业务实现。TASK-012（共途回信）与 TASK-013（双城日记）已确认范围与依赖方向，但**尚未编码、未新增表列**。技术栈以本科毕设、Web 优先、单人可持续维护为原则。本文是架构约束，不是地图视觉实现说明。
 
 ## 1. 架构目标与优先级
 
@@ -60,7 +60,7 @@ somewhere/
 └── artifacts/verification/        # 忽略 Git 的实际检查证据
 ```
 
-**目录是未来目标**；TASK-001 已创建 `apps/web`、`apps/api`、`packages/api-client`、`tests/{e2e,contract,architecture,smoke}`、`infra/postgres` 与 `scripts/verify.mjs`；TASK-003 新增 `modules/profile`；TASK-004 新增 `modules/postcard`、`modules/delivery`、`src/worker` 与 `src/tools/run-delivery-once.ts`；TASK-005 新增 `modules/story` 与 Web `features/moderation`；TASK-006 新增 `modules/discovery`；TASK-007 新增 `modules/passage`。`src/modules` 中除 `auth`/`health`/`profile`/`postcard`/`delivery`/`story`/`discovery`/`passage` 之外的领域模块仍不存在，不得把目录图当成已实现功能。
+**目录是未来目标**；TASK-001 已创建 `apps/web`、`apps/api`、`packages/api-client`、`tests/{e2e,contract,architecture,smoke}`、`infra/postgres` 与 `scripts/verify.mjs`；TASK-003 新增 `modules/profile`；TASK-004 新增 `modules/postcard`、`modules/delivery`、`src/worker` 与 `src/tools/run-delivery-once.ts`；TASK-005 新增 `modules/story` 与 Web `features/moderation`；TASK-006 新增 `modules/discovery`；TASK-007 新增 `modules/passage`；TASK-009 新增 `modules/safety`；TASK-010 新增 `modules/penpal` 与 Web `features/penpals`；TASK-011 新增 `modules/memory` 并启用 Web `features/memories` 的个人记忆区域。`src/modules` 中除 `auth`/`health`/`profile`/`postcard`/`delivery`/`story`/`discovery`/`passage`/`safety`/`penpal`/`memory` 之外的领域模块仍不存在，不得把目录图当成已实现功能。
 
 ## 4. 后端模块与依赖边界
 
@@ -68,15 +68,15 @@ somewhere/
 |---|---|---|
 | AuthModule | 注册、登录、会话、身份和角色 | `SessionGuard`, `SessionService`, `AccountService`；规划中的 `RoleService` 负责角色变更与审计 |
 | ProfileModule | 昵称、城市、接信状态 | `CityService`, `ProfileReader` |
-| PostcardModule | 草稿、发送、在途、收信、投递状态 | `PostcardService`, `PostcardDeliveryService` |
+| PostcardModule | 草稿、发送、在途、收信、投递状态；TASK-012 规划回信引用 | `PostcardService`, `PostcardDeliveryService`；规划 `PostcardReader`（只读窄接口，供 MemoryModule 读取已送达内容，不暴露正文给非参与者） |
 | DeliveryModule | 距离与延迟纯策略 | `DeliveryPolicy` |
 | StoryModule | 城市故事及审核状态 | `ApprovedStoryReader` |
 | DiscoveryModule | 发现入口、主题筛选、世界记忆地图城市聚合 | 组合 `ApprovedStoryReader` + `CityService`；只读；不复制故事表、不新增可见性条件 |
 | PassageModule | 共途经历状态、参与者、停泊 / 续程 | `PassagePolicy`, `PassageReader` |
-| PenpalModule | 双向信友授权 | `PenpalPolicy` |
-| MemoryModule | 双城日记、手帐、个人记忆 | `MemoryReader`, `MemoryPolicy` |
+| PenpalModule | 双向信友授权 | `PenpalPolicy`, `PenpalReader` |
+| MemoryModule | 个人记忆 CRUD（已实现）；双城日记（TASK-013 规划）；共同手帐 P1 | 当前无跨模块导出；规划 `MemoryReader`, `MemoryPolicy`；TASK-013 单向依赖 `PostcardModule.PostcardReader` |
 | RelayModule | 善意接力（P1） | 接力匿名聚合查询 |
-| SafetyModule | 封锁、举报、审核、审计 | `BlockPolicy`, `ModerationPolicy` |
+| SafetyModule | 封锁与安全基线（举报、通用处置仍规划） | `BlockPolicy`；举报/审核处置为规划 |
 | NotificationModule | 送达通知、通知偏好 | `NotificationPublisher` |
 
 依赖方向：`HTTP Controller → Application Service → Domain Policy → Repository / DB`。跨模块只能依赖对方导出的 `Reader/Policy/Service` 接口；**禁止**在另一模块中直接导入其 Prisma 表访问实现。领域策略只接受输入数据，不依赖 NestJS、Vue 或数据库。
@@ -86,6 +86,10 @@ TASK-005 的实际安排：城市故事的状态、审核决定与审核审计�
 TASK-006 的实际安排：世界记忆地图的城市聚合放在新的 `DiscoveryModule`，它单向依赖 `ProfileModule.CityService` 与 `StoryModule.ApprovedStoryReader`，只做组合与映射，不持有任何表。**没有**在 `ProfileModule` 的 `/cities` 上增加 `hasPublicStories`，也没有新增 `/cities/:id/stories` 别名，因为前者会形成 `ProfileModule ⇄ StoryModule` 循环依赖，后者会制造第二套公开查询。公开谓词统一由 `story/domain/story-visibility.ts` 定义。
 
 TASK-007 的实际安排：`PassageModule` 拥有 `passages`、`passage_participants`、`passage_events`，单向依赖 `AuthModule.SessionGuard` 与 `ProfileModule.ProfileReader`（只取对方昵称与城市名）；领域状态机与 `canSend` 是 `domain/` 下的纯函数，`PassagePolicy` 只是可注入包装，尚未被其他模块消费。**没有**提供 `POST /passages`：在邀请 / 接受流程实现前，公开创建接口会让一方替另一方表达同意。邮局尚未绑定 `passage_id`，因此停泊规则目前通过响应中的 `permissions.canSend` 对外可验证，TASK-008 再接入发送事务。
+
+TASK-009 的实际安排：新增 `SafetyModule`，拥有 `user_blocks` 与 `BlockRepository`，导出 `BlockPolicy`；`PostcardModule` 与 `PassageModule` 单向依赖 `SafetyModule`，不访问封锁表。`BlockPolicy` 只返回“是否可联系”，不暴露封锁方向或原因。`PassageService` 在 `canSend` 上叠加封锁，`PostcardService` 在收件人、草稿与发送前检查封锁；`PassageSummaryDto.counterpart` 增加 `id` 供 Web 封锁入口使用。举报、完整处置与 `RESTRICT` 仍不在本任务。
+
+TASK-010 的实际安排：新增 `PenpalModule`，拥有 `penpal_consents`、`PenpalRepository`、`PenpalService`，导出 `PenpalPolicy` 与 `PenpalReader`。`PenpalModule` 单向依赖 `AuthModule`、`ProfileModule`、`PassageModule`（新增 `PassageReader.hasCompletedPassageWith`）与 `SafetyModule`；`PostcardModule` 依赖 `PenpalReader`，把有效信友合并进既有收件人解析层。**规则：`PassageModule` 不得反向依赖 `PenpalModule`**，因此共途 DTO 不携带信友状态；未来 PAS-06 的“信友发起新共途”入口应放在 `PenpalModule` 或更高层组合，避免循环依赖。
 
 TASK-004 的实际安排：`DeliveryModule` 只导出纯 `DeliveryPolicy`；`PostcardModule` 拥有明信片表并通过 `PostcardDeliveryService` 提供到期领取；`src/worker/main.ts` 是组合根，循环调用该服务。这样避免 Postcard 与 Delivery 循环依赖，Worker 不暴露 HTTP。
 
@@ -106,9 +110,9 @@ TASK-004 的实际安排：`DeliveryModule` 只导出纯 `DeliveryPolicy`；`Pos
 | `passages` | id, topic, kind, progress_status, created_at, updated_at, completed_at?, archived_at? | 记录一段经历，不等于联系人；归档为经历级终态 |
 | `passage_participants` | passage_id, user_id, consent_state, paused_at?, last_confirmed_at? | 两人分别控制自己的许可；主键 `(passage_id,user_id)`；不建 `resume_after` |
 | `passage_events` | id, passage_id, actor_id, event_type, metadata_redacted?, created_at | 只记录状态迁移，不保存任何信件或用户文本 |
-| `penpal_consents` | owner_id, counterpart_id, consent_state, consented_at?, revoked_at? | 长期联系必须双方同意 |
+| `penpal_consents` | owner_id, counterpart_id, consent_state, consented_at?, revoked_at? | 两条单方记录；`ALLOW/REVOKED`；复合主键；长期联系必须双方同意 |
 | `diary_pages` | id, passage_id, postcard_left_id, postcard_right_id, created_at | 仅由已送达且有权可见的内容形成 |
-| `personal_memories` | id, owner_id, title, body, source_type, source_id?, created_at, updated_at | 私人默认，不随作者资料公开 |
+| `personal_memories` | id, owner_id, title, body, created_at, updated_at | 私人默认；TASK-011 不落 `source_type/source_id`，不提供 visibility/is_public |
 | `shared_notebooks` | id, passage_id, title, status | P1，独立共享授权 |
 | `user_blocks` | blocker_id, blocked_id, created_at | 最高优先级拒绝新的关系行为 |
 | `reports` | id, reporter_id, target_type, target_id, reason, status | 仅审核人员可查投诉详情 |
@@ -163,7 +167,7 @@ Worker 停机、重启或重复扫描不能丢信或提前送达；数据库是�
 - `GET /discovery/cities?topic=`（世界记忆地图城市聚合；匿名可读，只读）
 - `GET /moderation/queue`、`POST /moderation/stories/:id/decision`（仅 `ADMIN`）
 - `GET /passages?status=`、`GET /passages/:id`、`POST /passages/:id/pause|resume|complete|archive`（无创建 / 邀请端点）
-- `GET /memories/diaries`、`GET/POST /memories/personal`
+- `GET /memories/diaries`、`GET /memories/diaries/:id`（TASK-013 规划）、`GET/POST /memories/personal`、`PATCH/DELETE /memories/personal/:id`
 - `POST /safety/reports`、`POST /safety/blocks`
 
 成功返回约定 DTO；错误统一 JSON：
@@ -190,6 +194,9 @@ Worker 停机、重启或重复扫描不能丢信或提前送达；数据库是�
 - TASK-005 已实现：用户角色为 `USER | ADMIN`，只有 `ADMIN` 可访问城市故事审核接口；角色通过非生产脚本 `admin:grant` 授予，注册不可自选；会话每次从数据库解析当前角色。详见 `specs/02-auth.md` 的 AUTH-08 与 `specs/12-safety-and-moderation.md`。
 - 角色扩展为规划：目标角色 `USER | MODERATOR | CURATOR | ADMIN`，`GUEST` 只是未登录状态，不写入数据库。采用单枚举 + 权限蕴含；`ADMIN` 不能查看其他用户的邮箱，也不能读取私人明信片、共同日记或个人记忆。完整边界见 `specs/15-roles-and-permissions.md`；当前代码尚未实现 `MODERATOR` / `CURATOR` 或后台用户管理。
 - 被删除、撤回授权或审核下架的公开内容要从城市故事站和地图两个入口同时消失。
+- TASK-009 已实现最小封锁：`user_blocks(blocker_id, blocked_id)` 单向记录，任一方封锁即阻止双方新的邮局与共途通信；封锁不删除历史，已送达信件的读取权保持不变。`BlockPolicy` 是唯一跨模块读取入口。
+- TASK-010 已实现双向信友：`penpal_consents(owner_id, counterpart_id, consent_state, consented_at, revoked_at)` 保存两条单方记录，聚合状态由纯函数派生；`PenpalPolicy.canContinueContact` 是跨模块唯一判定入口，`PenpalReader.listActiveCounterpartIds` 只向邮局提供有效信友 ID。任一方向封锁优先于信友；撤销与拒绝不删除共途或信件。
+- TASK-011 已实现个人记忆：`personal_memories(owner_id, title, body)` 只由本人读写；列表、创建、编辑、删除全部带 `owner_id`，非本人/不存在统一 404。`ADMIN` 不获得任何私人记忆读取权；共途、信友、封锁关系都不改变归属。
 - 开发日志与自动化截图禁止含真实用户数据；测试使用虚构数据。
 
 ## 9. 前端信息架构（仅产品与路由）
@@ -198,9 +205,9 @@ Worker 停机、重启或重复扫描不能丢信或提前送达；数据库是�
 |---|---|---|
 | 邮局 | `/post-office` | 来信、在途、草稿 |
 | 发现 | `/discover`、`/discover/map`、`/discover/map/:cityId` | 城市故事站、世界记忆地图城市入口、单城市故事 |
-| 共途 | `/passages` | 我的共途、明信片、续程 / 停泊、信友 |
-| 纪念册 | `/memories` | 双城日记、共同手帐、个人记忆 |
-| 非主导航 | `/auth/*`, `/settings`, `/post-office/compose/:id?`, `/discover/stories/:id`, `/postcards/:id` | 登录、设置、写信、故事详情 |
+| 共途 | `/passages`、`/passages/:id` | 我的共途、明信片、续程 / 停泊；信友入口 `/penpals` |
+| 纪念册 | `/memories` | 双城日记（未开放）、共同手帐（P1）、个人记忆 CRUD |
+| 非主导航 | `/auth/*`, `/settings`, `/penpals`, `/post-office/compose/:id?`, `/discover/stories/:id`, `/postcards/:id` | 登录、设置、信友、写信、故事详情 |
 
 规划中的后台路由（当前不存在，不得实现假页面）：`/moderation`（故事审核，`MODERATOR/ADMIN`）、`/admin/users`（用户与角色管理，`ADMIN`）、`/admin/role-changes`（角色变更审计，`ADMIN`）。现有 `/admin/moderation` 在角色扩展任务中再评估是否改名为 `/moderation`。
 
@@ -343,7 +350,47 @@ TASK-004 未实现回信、`passage_id`、`reply_to_postcard_id`、模板/多媒
 - 收件人：`GET /postcards/recipients?passageId=` 仅参与者可读；`canSend=false`、对方非 `OPEN` 或无城市时返回 `[]`；无参数时保持 TASK-004 演示白名单。
 - 发送：带 `passageId` 的草稿在幂等返回之后、城市计算之前校验 `canSend`；false 返回 409 `PASSAGE_STATE_CONFLICT`，不创建明信片、不消耗草稿与每日额度。收件人固定为共途对方，第三方 `recipientId` 不会被采纳。
 - Web：共途详情在 `permissions.canSend` 为真时显示「写一张明信片」，跳转 `/post-office/compose?passageId=`；写信页显示共途主题，收件人由共途决定且下拉禁用，提供「返回共途」；停泊 / 完成 / 归档后入口消失。
-- 仍未实现：邀请与创建入口、回信、信友、纪念册、通知、举报 / 封锁、`CLOSED` 写入口与成员级归档。
+- 仍未实现：邀请与创建入口、回信、信友、纪念册、通知、举报、完整安全处置、`CLOSED` 写入口与成员级归档；最小封锁由 TASK-009 实现。
+
+### 13.11 TASK-009 最小封锁实现
+
+- 数据表：新增 `user_blocks(blocker_id, blocked_id, created_at)`，复合主键、`blocker_id <> blocked_id` 检查约束、双向外键 `ON DELETE CASCADE` 与 `(blocked_id, created_at)` 索引；迁移 `20261029100000_add_user_blocks` 只新增表，既有表与行不变。
+- `SafetyModule`：`SafetyController` 提供 `GET /safety/blocks`、`POST /safety/blocks`、`DELETE /safety/blocks/:userId`；`SafetyService` 只返回本人主动封锁的 `{ userId, nickname, blockedAt }`，不返回 email 或“谁封锁了我”。自我封锁 422、目标不存在 404、解除幂等。
+- 领域与边界：`safety/domain/block-policy.ts` 为纯函数；`BlockPolicy` 导出 `isBlockedEitherDirection` 与 `listRelatedBlockedIds`，不暴露封锁方向。`PostcardModule`、`PassageModule` 单向依赖 `SafetyModule`；架构检查允许 `block-policy.service` 作为跨模块公开入口。
+- 邮局：默认收件人与共途收件人都排除被封锁者；草稿创建/修改指向被封锁者返回 403 `CONTACT_BLOCKED`；发送先判封锁，再判共途许可（409）。失败不创建明信片、不消耗草稿与每日额度。
+- 共途：`PassageService` 的 `canSend` 在纯函数结果上叠加封锁；任一方向存在封锁即为 false，不改变参与者 `consent_state`。`PassageSummaryDto.counterpart` 新增 `id`，用于 Web 封锁操作；仍不含 email、坐标或接信状态。
+- Web：明信片详情与共途详情增加封锁确认入口；设置页展示本人封锁列表并支持解除；发送错误映射 `CONTACT_BLOCKED`。历史信件读取保持不变。
+- 仍未实现：举报、完整审核处置、`RESTRICT`、封锁后隐藏历史、信友与纪念册。
+
+### 13.12 TASK-010 双向信友与邮局接入实现
+
+- 数据表：新增 `penpal_consents(owner_id, counterpart_id, consent_state, consented_at?, revoked_at?)`，复合主键、自指检查、状态与时间一致性检查、`(counterpart_id, consent_state)` 索引；迁移 `20261030100000_add_penpal_consents` 只新增枚举与表。
+- `PenpalModule`：`GET /api/v1/penpals` 返回 `active/incoming/outgoing`；`POST /api/v1/penpals/consent` 记录本人同意；`DELETE /api/v1/penpals/:counterpartId/consent` 撤销或拒绝。重复同意保持原 `consented_at`，撤销幂等。
+- 领域：`domain/penpal-policy.ts` 的 `derivePenpalStatus` / `toPenpalView` / `canContinueContact` / `indexPenpalPairs` 为纯函数；两条单方记录不落库为关系布尔值。
+- 资格：`PassageReader.hasCompletedPassageWith` 只回答两人是否至少有一段 `completed_at` 非空的共途；无资格、目标不存在、非参与者统一 404，防止陌生人触达与账号枚举。
+- 封锁：`PenpalPolicy` 消费 `BlockPolicy`；任一方向封锁时列表隐藏、请求 403，撤销仍可用；同意行不删除，解除封锁后按双方原 `ALLOW` 恢复。
+- 邮局：`PostcardModule` 通过 `PenpalReader.listActiveCounterpartIds` 把有效信友并入既有收件人解析层；未新增 `penpal_id` 字段，不改变发送事务。
+- Web：新增 `/penpals`；共途列表与已完成共途详情提供入口；写信页说明收件人来源为演示白名单与信友，不提供用户搜索。
+- 仍未实现：共途邀请/创建、信友发起新共途、信友专属暂停、通知、纪念册、举报与 `RESTRICT`。
+
+### 13.13 TASK-011 个人记忆实现
+
+- 数据表：新增 `personal_memories(id, owner_id, title, body, created_at, updated_at)`，外键 `ON DELETE CASCADE`、长度与“非空白”检查、`(owner_id, updated_at DESC, id DESC)` 索引；迁移 `20261030110000_add_personal_memories` 只新增表。
+- `MemoryModule`：`GET/POST /api/v1/memories/personal`、`PATCH/DELETE /api/v1/memories/personal/:id`；全部 `SessionGuard`，当前不导出跨模块服务。
+- 领域：`domain/personal-memory.ts` 统一做标题 1–80、正文 1–3000、去首尾空白与码点计数；数据库检查再兜底。
+- 权限：所有查询显式带 `owner_id`；非本人、记录不存在、非法 UUID 统一 404 `RESOURCE_NOT_ACCESSIBLE`；`ADMIN` 不获得私人记忆直通权限。
+- Web：`/memories` 保留双城日记与共同手帐的诚实空态，新增个人记忆表单、列表、编辑、删除确认、四态、390px 与键盘可用。
+- 仍未实现：双城日记、共同手帐、`source_type/source_id`、公开/分享/导出、通知、举报与角色扩展。
+
+### 13.14 TASK-012 / TASK-013 规划（未实现）
+
+> 2026-10-30 确认范围。以下能力尚未编码，不得当作已实现。
+
+- TASK-012 回信：`postcards` 与 `postcard_drafts` 新增可空 `reply_to_postcard_id`；`postcards` 侧部分唯一索引保证一张原信最多一封回信；`GET /postcards/:id` 增加 `passageId` 与 `canReply`；新增错误码 `POSTCARD_ALREADY_REPLIED`（409）。回信只允许共途内、已送达、查看者为收件人的信。
+- TASK-013 双城日记：新增 `diary_pages(passage_id, postcard_left_id, postcard_right_id, created_at)`；`left` 为被回信的原信，`right` 为回信；每次完整交换一张只读双页，不向同一页追加。
+- 跨模块方向：`MemoryModule → PostcardModule.PostcardReader`（只读窄接口），`PostcardModule` **不得**反向依赖 `MemoryModule`。`PostcardReader` 只返回两封均已 `DELIVERED` 且查看者是参与者的窄数据；正文不进入 `diary_pages`。
+- 生成时机：Worker 组合根在 `PostcardDeliveryService.deliverDue()` 之后调用 `MemoryService.generateDueDiaries()`；投递失败与日记生成失败互不回滚，靠唯一键与下一轮扫描补生成。
+- 尚未实现：日记删除、公开/分享/导出、通知、举报与角色扩展；共途邀请/创建仍不提供 `POST /passages`。
 
 ## 14. 角色与权限规划（未实现）
 

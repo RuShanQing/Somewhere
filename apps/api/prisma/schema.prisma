@@ -81,6 +81,11 @@ enum PassageEventType {
   ARCHIVED
 }
 
+enum PenpalConsentState {
+  ALLOW
+  REVOKED
+}
+
 model User {
   id                 String              @id @default(uuid()) @db.Uuid
   emailNormalized    String              @unique @map("email_normalized") @db.VarChar(254)
@@ -102,6 +107,11 @@ model User {
   storyReviewActions StoryReviewAction[]
   passageParts       PassageParticipant[] @relation("PassageParticipant")
   passageEvents      PassageEvent[]       @relation("PassageEventActor")
+  blocksCreated      UserBlock[]          @relation("UserBlockBlocker")
+  blocksReceived     UserBlock[]          @relation("UserBlockBlocked")
+  personalMemories   PersonalMemory[]
+  penpalConsentsGiven    PenpalConsent[] @relation("PenpalConsentOwner")
+  penpalConsentsReceived PenpalConsent[] @relation("PenpalConsentCounterpart")
 
   @@map("users")
 }
@@ -295,4 +305,47 @@ model PassageEvent {
 
   @@index([passageId, createdAt])
   @@map("passage_events")
+}
+
+model UserBlock {
+  blockerId String   @map("blocker_id") @db.Uuid
+  blockedId String   @map("blocked_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  blocker User @relation("UserBlockBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("UserBlockBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId, createdAt])
+  @@map("user_blocks")
+}
+
+/// 个人记忆：只归本人所有；本任务不提供公开、共享或来源引用字段。
+model PersonalMemory {
+  id        String   @id @default(uuid()) @db.Uuid
+  ownerId   String   @map("owner_id") @db.Uuid
+  title     String   @db.VarChar(80)
+  body      String   @db.VarChar(3000)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, updatedAt(sort: Desc), id(sort: Desc)])
+  @@map("personal_memories")
+}
+
+model PenpalConsent {
+  ownerId       String             @map("owner_id") @db.Uuid
+  counterpartId String             @map("counterpart_id") @db.Uuid
+  consentState  PenpalConsentState @default(ALLOW) @map("consent_state")
+  consentedAt   DateTime?          @map("consented_at") @db.Timestamptz(3)
+  revokedAt     DateTime?          @map("revoked_at") @db.Timestamptz(3)
+
+  owner       User @relation("PenpalConsentOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  counterpart User @relation("PenpalConsentCounterpart", fields: [counterpartId], references: [id], onDelete: Cascade)
+
+  @@id([ownerId, counterpartId])
+  @@index([counterpartId, consentState])
+  @@map("penpal_consents")
 }

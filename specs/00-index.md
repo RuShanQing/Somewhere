@@ -2,30 +2,30 @@
 
 **这是面向编码代理的“需求事实源”**，不是功能已经完成的证明。开发阶段按 `tasks/current.md` 选择对应文件，只允许实现已授权范围。文档编号用于稳定交叉引用；发生技术变更时同步检查相关模块。
 
-## 0. 当前实现进度（2026-10-29）
+## 0. 当前实现进度（2026-10-30）
 
-> 截至 TASK-008 完成。这里只记录代码与验收状态，不代表 PRD 全部完成；实际结果以 `tasks/current.md` 和 `artifacts/verification/` 为准。
+> 截至 TASK-011 完成。这里只记录代码与验收状态，不代表 PRD 全部完成；实际结果以 `tasks/current.md` 和 `artifacts/verification/` 为准。
 
 | 规范 | 当前状态 | 已实现 | 尚未实现 |
 |---|---|---|---|
 | [01-navigation.md](01-navigation.md) | 基础完成 | 四导航、路由守卫、登录/注册页、设置页、诚实空态、键盘与移动端 | 纪念册业务页 |
 | [02-auth.md](02-auth.md) | 基础完成 | 注册/登录/退出、`/auth/me`、Argon2id、Cookie、单活动会话、限流、Origin、日志脱敏、`USER/ADMIN` 角色 | 邮箱验证、找回密码、设备会话、账号删除、OAuth |
 | [03-profiles.md](03-profiles.md) | 薄切片完成 | 49 条城市目录、昵称/城市/接信状态、最小 `/settings` | bio、语言、主题标签、可见性、公开资料页、自建城市 |
-| [04-post-office.md](04-post-office.md) | 基础完成 | 邮局三栏摘要、写信页、详情页、加载/空/错误态、移动端 | 回信、通知、审核隔离 |
-| [05-postcards-delivery.md](05-postcards-delivery.md) | TASK-008 完成 | 草稿 CRUD、发送事务、按城市距离延迟、Worker 只投递一次、在途保密、演示白名单、共途来源、每日上限 | 信友来源、回信、模板、通知、审核处置 |
+| [04-post-office.md](04-post-office.md) | 基础完成 | 邮局三栏摘要、写信页、详情页、加载/空/错误态、移动端 | 回信（TASK-012 规划）、通知、审核隔离 |
+| [05-postcards-delivery.md](05-postcards-delivery.md) | TASK-010 完成；回信 TASK-012 规划 | 草稿 CRUD、发送事务、按城市距离延迟、Worker 只投递一次、在途保密、演示白名单、共途来源、信友来源、每日上限 | 回信（TASK-012 规划）、模板、通知、审核处置 |
 | [06-city-stories.md](06-city-stories.md) | TASK-005 完成 | 故事草稿/提交/撤回、管理员审核、公开故事站与详情、城市容量与提交配额 | 显示城市/上地图/共途邀请开关、匿名作者、30 天轮换 |
 | [07-world-memory-map.md](07-world-memory-map.md) | TASK-006 完成 | 城市聚合接口、`/discover/map` 城市入口页、单城市故事页；复用同一 `Story ID` 与审核状态 | 地图渲染技术（MAP-06 明确列为非目标） |
 | [08-goodwill-relay.md](08-goodwill-relay.md) | 未开始（P1） | 无 | 接力匹配、匿名、终止 |
-| [09-shared-passage.md](09-shared-passage.md) | TASK-008 完成 | 列表/详情、停泊/续程/完成/归档、`canSend`、非生产 seed、并发与幂等、邮局 `passage_id` 接入 | 邀请、信友联动、纪念册 |
-| [10-penpals.md](10-penpals.md) | 未开始 | 无 | 双向信友授权 |
-| [11-memories.md](11-memories.md) | 未开始 | 无 | 双城日记、共同手帐、个人记忆 |
-| [12-safety-and-moderation.md](12-safety-and-moderation.md) | 故事审核完成 | 通用 Origin/限流/错误基线、`ADMIN` 故事审核与审计 | 举报、封锁、通用安全处置、`RESTRICT` |
+| [09-shared-passage.md](09-shared-passage.md) | TASK-008 完成；回信 TASK-012 规划 | 列表/详情、停泊/续程/完成/归档、`canSend`、非生产 seed、并发与幂等、邮局 `passage_id` 接入 | 回信闭环（TASK-012 规划）、邀请、信友联动、纪念册 |
+| [10-penpals.md](10-penpals.md) | TASK-010 完成 | 双方同意、撤销/拒绝、三组列表、封锁优先、邮局收件人接入 | 信友发起新共途、信友专属暂停、通知、纪念册 |
+| [11-memories.md](11-memories.md) | TASK-011 个人记忆完成；双城日记形态已确认（TASK-013 规划） | 个人记忆手工 CRUD、仅本人可见、列表/创建/编辑/删除 | 双城日记（TASK-013 规划，依赖 TASK-012 回信）、共同手帐、来源引用、公开/分享/导出 |
+| [12-safety-and-moderation.md](12-safety-and-moderation.md) | TASK-010 封锁覆盖信友 | 通用 Origin/限流/错误基线、`ADMIN` 故事审核与审计、`user_blocks`、封锁列表/创建/解除、邮局/共途/信友拦截 | 举报、通用安全处置、`RESTRICT`、封锁后隐藏历史 |
 | [13-notifications.md](13-notifications.md) | 未开始 | 无 | 送达通知、通知偏好 |
 | [14-story-deferred-scope.md](14-story-deferred-scope.md) | 范围决策 | TASK-005 已按边界实现 | 显示城市/上地图/共途邀请开关、匿名作者、30 天轮换等 |
 | [15-roles-and-permissions.md](15-roles-and-permissions.md) | 规划（未实现） | 当前仍为 `USER/ADMIN`；`GUEST` 仅表示未登录 | `MODERATOR` 最小切片、`ADMIN` 用户/角色管理、`CURATOR` 与精选专题 |
 
-**最近任务**：TASK-001 基础工程与认证；TASK-002 AUTH 收敛；TASK-003 城市与最小资料；TASK-004 邮局与距离延迟投递；TASK-005 城市故事站与最小审核闭环；TASK-006 世界记忆地图业务入口；TASK-007 共途状态与参与者许可；TASK-008 共途通信许可接入邮局（DONE）。
-**建议下一任务**：双向信友（`PenpalModule`），之后再做纪念册。仍不展开共途邀请专项测试，也不进入二维/三维地图渲染。开放邀请或陌生人触达前必须先实现 SafetyModule 的封锁能力。尚未获批准，不得自动开始。
+**最近任务**：TASK-001 基础工程与认证；TASK-002 AUTH 收敛；TASK-003 城市与最小资料；TASK-004 邮局与距离延迟投递；TASK-005 城市故事站与最小审核闭环；TASK-006 世界记忆地图业务入口；TASK-007 共途状态与参与者许可；TASK-008 共途通信许可接入邮局；TASK-009 最小封锁；TASK-010 双向信友与邮局接入；TASK-011 个人记忆（DONE）；TASK-012 共途回信（READY，未开始编码）。
+**当前任务**：TASK-012 共途回信（`replyToPostcardId`），完成后进入 TASK-013 双城日记（MEMORY-02/03）。双城日记的“册 / 页 / 左右”形态与“两封均已送达才生成”的口径已确认。共途邀请/创建（PAS-01）延后为独立任务，仍不展开其专项测试，也不进入二维/三维地图渲染。
 **角色规划**：四角色设计已记录在 [15-roles-and-permissions.md](15-roles-and-permissions.md)，但不改变上述顺序；`MODERATOR`、`ADMIN` 角色管理、`CURATOR` 均需另立任务，当前不得实现。`ADMIN` 不允许查看其他用户的邮箱，也不允许读取私人信件或私人记忆。
 
 ## 1. 四个主导航与规格映射

@@ -24,7 +24,10 @@ export class PassageSelfDto {
 }
 
 export class PassageCounterpartDto {
-  @ApiProperty({ description: '对方公开昵称；不返回邮箱或用户 ID' })
+  @ApiProperty({ description: '对方用户 ID；仅参与者可见，不返回邮箱' })
+  id!: string;
+
+  @ApiProperty({ description: '对方公开昵称；不返回邮箱' })
   nickname!: string;
 
   @ApiPropertyOptional({ type: () => PassageCityDto, nullable: true, description: '对方公开城市' })

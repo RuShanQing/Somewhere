@@ -3,6 +3,7 @@ import type { PassageKind } from '@prisma/client';
 import { AppError } from '../../common/errors/app-error';
 import type { AuthenticatedUser } from '../../common/http/request.types';
 import { ProfileReader, type MailProfile } from '../profile/profile-reader.service';
+import { BlockPolicy } from '../safety/block-policy.service';
 import { canSendPassage, isValidParticipantPair } from './domain/passage-policy';
 import type { PassageListQueryDto } from './dto/passage.dto';
 import type {
@@ -19,22 +20,31 @@ export class PassageService {
   constructor(
     private readonly passages: PassageRepository,
     private readonly profiles: ProfileReader,
+    private readonly blocks: BlockPolicy,
   ) {}
 
   async list(user: AuthenticatedUser, query: PassageListQueryDto): Promise<PassageListDto> {
     const statuses =
       query.status && query.status !== 'ALL' ? [query.status] : null;
     const records = await this.passages.listForUser(user.id, statuses);
-    const profileByUserId = await this.loadCounterpartProfiles(records, user.id);
+    const [profileByUserId, blockedIds] = await Promise.all([
+      this.loadCounterpartProfiles(records, user.id),
+      this.blocks.listRelatedBlockedIds(user.id),
+    ]);
     return {
-      items: records.map((record) => this.toSummary(record, user.id, profileByUserId)),
+      items: records.map((record) =>
+        this.toSummary(record, user.id, profileByUserId, blockedIds),
+      ),
     };
   }
 
   async get(user: AuthenticatedUser, id: string): Promise<PassageSummaryDto> {
     const record = await this.requireParticipant(user, id);
-    const profileByUserId = await this.loadCounterpartProfiles([record], user.id);
-    return this.toSummary(record, user.id, profileByUserId);
+    const [profileByUserId, blockedIds] = await Promise.all([
+      this.loadCounterpartProfiles([record], user.id),
+      this.blocks.listRelatedBlockedIds(user.id),
+    ]);
+    return this.toSummary(record, user.id, profileByUserId, blockedIds);
   }
 
   async pause(user: AuthenticatedUser, id: string): Promise<PassageSummaryDto> {
@@ -85,6 +95,7 @@ export class PassageService {
       record,
       first,
       new Map(profiles.map((profile) => [profile.userId, profile])),
+      new Set(),
     );
   }
 
@@ -137,8 +148,11 @@ export class PassageService {
     record: PassageRecord,
     viewerId: string,
   ): Promise<PassageSummaryDto> {
-    const profileByUserId = await this.loadCounterpartProfiles([record], viewerId);
-    return this.toSummary(record, viewerId, profileByUserId);
+    const [profileByUserId, blockedIds] = await Promise.all([
+      this.loadCounterpartProfiles([record], viewerId),
+      this.blocks.listRelatedBlockedIds(viewerId),
+    ]);
+    return this.toSummary(record, viewerId, profileByUserId, blockedIds);
   }
 
   private async loadCounterpartProfiles(
@@ -161,6 +175,7 @@ export class PassageService {
     record: PassageRecord,
     viewerId: string,
     profileByUserId: Map<string, MailProfile>,
+    blockedIds: Set<string>,
   ): PassageSummaryDto {
     const me = record.participants.find((participant) => participant.userId === viewerId);
     const counterpart = record.participants.find(
@@ -169,6 +184,7 @@ export class PassageService {
     const counterpartProfile = counterpart
       ? profileByUserId.get(counterpart.userId)
       : undefined;
+    const counterpartBlocked = counterpart ? blockedIds.has(counterpart.userId) : false;
 
     return {
       id: record.id,
@@ -184,19 +200,22 @@ export class PassageService {
         pausedAt: me?.pausedAt?.toISOString() ?? null,
       },
       counterpart: {
+        id: counterpart?.userId ?? '',
         nickname: counterpartProfile?.nickname ?? '一位旅人',
         city: counterpartProfile?.city ?? null,
         consentState: counterpart?.consentState ?? 'CLOSED',
       },
       permissions: {
-        canSend: canSendPassage({
-          viewerId,
-          progressStatus: record.progressStatus,
-          participants: record.participants.map((participant) => ({
-            userId: participant.userId,
-            consentState: participant.consentState,
-          })),
-        }),
+        canSend:
+          !counterpartBlocked &&
+          canSendPassage({
+            viewerId,
+            progressStatus: record.progressStatus,
+            participants: record.participants.map((participant) => ({
+              userId: participant.userId,
+              consentState: participant.consentState,
+            })),
+          }),
       },
     };
   }

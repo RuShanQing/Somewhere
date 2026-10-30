@@ -15,9 +15,9 @@ try {
 const prisma = new PrismaClient({ datasources: { db: { url: testUrl } } });
 
 try {
-  // 保留 cities 静态目录，只清理用户、故事、邮局与共途相关数据
+  // 保留 cities 静态目录，只清理用户、故事、邮局、共途与信友相关数据
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "passage_events", "passage_participants", "passages", "story_review_actions", "stories", "postcard_drafts", "postcards", "profiles", "sessions", "users" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "personal_memories", "penpal_consents", "passage_events", "passage_participants", "passages", "story_review_actions", "stories", "postcard_drafts", "postcards", "profiles", "sessions", "users" RESTART IDENTITY CASCADE',
   );
   process.stdout.write(`[test-db] 已清空 ${databaseName} 中的测试数据\n`);
 } finally {

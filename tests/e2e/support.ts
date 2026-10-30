@@ -96,13 +96,13 @@ export function seedPassageForEmails(options: {
   emailA: string;
   emailB: string;
   topic: string;
-}): void {
+}): string {
   const apiRoot = resolve(__dirname, '../../apps/api');
   const testDatabaseUrl = process.env.E2E_TEST_DATABASE_URL;
   if (!testDatabaseUrl) {
     throw new Error('E2E 缺少 E2E_TEST_DATABASE_URL');
   }
-  execFileSync(
+  const output = execFileSync(
     'node',
     [
       'scripts/seed-passage.mjs',
@@ -121,9 +121,15 @@ export function seedPassageForEmails(options: {
         DATABASE_URL: testDatabaseUrl,
         TEST_DATABASE_URL: testDatabaseUrl,
       },
+      encoding: 'utf8',
       stdio: 'pipe',
     },
   );
+  const match = /id=([0-9a-f-]{36})/.exec(output);
+  if (!match) {
+    throw new Error('共途 seed 未返回 ID');
+  }
+  return match[1];
 }
 
 /**

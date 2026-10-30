@@ -2,7 +2,7 @@
 
 **优先级：P0** · 主导航：共途 · 归属：PassageModule
 
-> 实现状态（2026-10-29，TASK-007）：已实现三组状态中的前两组（经历进度、每人通信意愿）、列表 / 详情、停泊 / 续程 / 完成 / 归档与 `PassagePolicy.canSend`。**未实现**邀请与关系发起、邮局 `passage_id`、信友、纪念册、通知与封锁。本文件不设计邀请环节的专项测试。
+> 实现状态（2026-10-29，TASK-007）：已实现三组状态中的前两组（经历进度、每人通信意愿）、列表 / 详情、停泊 / 续程 / 完成 / 归档与 `PassagePolicy.canSend`。**TASK-007 当时未实现**邀请与关系发起、邮局 `passage_id`、信友、纪念册、通知与封锁；邮局与封锁已由 TASK-008/009 补齐，信友授权已由 TASK-010 补齐。邀请/创建、信友发起新共途、纪念册与通知仍未实现。本文件不设计邀请环节的专项测试。
 
 ## PASSAGE-01 目标
 
@@ -10,7 +10,9 @@
 
 **本文件定义共途业务状态与权限，不包含邀请环节的专项测试方案。**
 
-> 实现状态（2026-10-29）：TASK-007 完成三表、6 个接口、停泊 / 续程 / 完成 / 归档与 `canSend`；TASK-008 把 `PassagePolicy.canSend` 接入邮局发送链路，并在草稿与明信片上保存可空 `passage_id`。邀请 / 创建入口、信友与纪念册仍未实现。
+> 实现状态（2026-10-30）：TASK-007 完成三表、6 个接口、停泊 / 续程 / 完成 / 归档与 `canSend`；TASK-008 把 `PassagePolicy.canSend` 接入邮局发送链路，并在草稿与明信片上保存可空 `passage_id`。TASK-009 让 `BlockPolicy` 叠加到 `canSend`，封锁优先于共途许可；`PassageSummaryDto.counterpart` 增加 `id` 供 Web 封锁入口使用。TASK-010 由 `PassageReader.hasCompletedPassageWith` 向信友模块提供“是否曾完成共途”的只读资格，不暴露主题或正文；共途 DTO 不携带信友状态。邀请 / 创建入口、信友发起新共途与纪念册仍未实现。
+>
+> TASK-012 规划（2026-10-30，**未实现**）：回信能力补齐 PAS-02 的“两封均已送达”。回信必须显式引用被回应的信，一张原信最多一次回信；回信不创建共途、不改变任何一方许可，也不代表成为信友。详见 `specs/05-postcards-delivery.md` POSTCARD-09 与本文件 PASSAGE-09。
 
 ## PASSAGE-02 共途类型与页面
 
@@ -78,7 +80,7 @@
 
 详情与列表返回本人可观察的 `permissions.canSend`，由 `PassagePolicy` 计算：查看者是参与者、恰好两名参与者、进度为 `ACTIVE`、双方均为 `ALLOW` 时才为 true。记忆可见性不参与该判定，也不由 `progress_status` 推导。
 
-跨模块发送权限必须通过 `PassagePolicy.canSend` 提供，不能在邮局里硬编码状态。TASK-008 已接入邮局：由 `PassageReader.findSendContext()` 统一解析参与者与许可，`PostcardModule` 不直接访问共途表。
+跨模块发送权限必须通过 `PassagePolicy.canSend` 提供，不能在邮局里硬编码状态。TASK-008 已接入邮局：由 `PassageReader.findSendContext()` 统一解析参与者与许可，`PostcardModule` 不直接访问共途表。TASK-009 起，`PassageService` 计算 `canSend` 时叠加 `BlockPolicy`；任一方向存在封锁时 `canSend=false`，邮局发送返回 403 `CONTACT_BLOCKED`，不会落到 409。封锁不修改 `passage_participants`，解除后原有许可恢复。
 
 ## PASSAGE-07 异常
 
@@ -96,3 +98,34 @@
 - 双方独立授权；不能通过切换共途状态替另一方改变意愿。
 - 一段经历归档后在进行中列表消失，但纪念册按其独立权限仍可读取。
 - 封锁和安全拦截优先于曾经的共途权限。
+
+## PASSAGE-09 回信与双向交换闭环（TASK-012 规划，未实现）
+
+> 2026-10-30 确认范围，代码与迁移均未开始。本节只补齐 PAS-02 缺失的“第二封信”，不涉及邀请环节。
+
+### 9.1 规则
+
+- 回信只能由原信收件人发起，且原信必须已 `DELIVERED`、属于某段共途。
+- 回信自动继承原信的 `passage_id` 与对方参与者，不新建共途、不改共途进度。
+- 一张原信最多一次回信；第二次回信返回 409 `POSTCARD_ALREADY_REPLIED`。
+- 任一方停泊、共途已完成或已归档、任一方封锁时，不能新建回信；已寄出的回信仍按原定时间送达。
+- 回信不改变任何一方的 `consent_state`，也不建立信友关系。
+
+### 9.2 与 PAS-02 的关系
+
+PAS-02 的“两封均已送达才完成一次双向交换”在 TASK-012 之后才具备完整数据基础：
+
+```text
+A 寄出原信（DELIVERED）
+→ B 回信（reply_to_postcard_id = A 的原信，DELIVERED）
+→ 形成一次完整双向交换
+```
+
+共途的 `progress_status` 仍是独立维度：回信完成不自动把 `ACTIVE` 改为 `COMPLETED`，也不影响记忆访问权限（见 PASSAGE-03）。
+
+### 9.3 验收
+
+- 回信落库后，原信与回信可通过 `reply_to_postcard_id` 可靠配对。
+- 原信未送达、非参与者、非共途、已回信、停泊或封锁时，不能产生回信。
+- 回信不改变双方许可、共途状态或信友关系。
+- 已寄出的回信不受后续停泊影响，仍按既定时间送达。

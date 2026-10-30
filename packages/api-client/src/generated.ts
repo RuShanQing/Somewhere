@@ -405,6 +405,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/safety/blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 我发起的封锁
+         * @description 只返回本人主动封锁的用户；不返回谁封锁了我，也不返回邮箱。
+         */
+        get: operations["SafetyController_list"];
+        put?: never;
+        /**
+         * 封锁用户
+         * @description 封锁后新的通信行为被拒绝；重复调用幂等。不能封锁自己。
+         */
+        post: operations["SafetyController_block"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/safety/blocks/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 解除本人发起的封锁
+         * @description 只能解除本人发起的封锁；重复调用幂等。
+         */
+        delete: operations["SafetyController_unblock"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/penpals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 我的信友关系
+         * @description 只返回本人视角的已建立信友、收到的请求与发出的请求；不返回对方是否撤销、日期或邮箱。
+         */
+        get: operations["PenpalsController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/penpals/consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 记录本人持续通信意愿
+         * @description 必须与对方至少完成过一段共途；双方分别同意后才是有效信友。重复调用幂等。
+         */
+        post: operations["PenpalsController_consent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/penpals/{counterpartId}/consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 撤销本人持续通信许可
+         * @description 只撤销本人意愿；收到请求时也可用它关闭请求。重复调用幂等，不删除历史。
+         */
+        delete: operations["PenpalsController_revoke"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/stories/mine": {
         parameters: {
             query?: never;
@@ -586,6 +690,54 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/memories/personal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 我的个人记忆
+         * @description 只返回本人记录，按最近更新时间倒序；不返回 email、ownerId 或关系字段。
+         */
+        get: operations["MemoriesController_list"];
+        put?: never;
+        /**
+         * 新建个人记忆
+         * @description 只归本人所有；默认私人，不提供公开或共享入口。
+         */
+        post: operations["MemoriesController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/memories/personal/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 删除本人的个人记忆
+         * @description 只删除本人视图；重复删除或非本人记录返回 404。
+         */
+        delete: operations["MemoriesController_remove"];
+        options?: never;
+        head?: never;
+        /**
+         * 编辑本人的个人记忆
+         * @description 非本人或不存在的记录统一 404；标题与正文至少提供一个。
+         */
+        patch: operations["MemoriesController_update"];
         trace?: never;
     };
     "/api/v1/health": {
@@ -954,7 +1106,9 @@ export interface components {
             countryCode: string;
         };
         PassageCounterpartDto: {
-            /** @description 对方公开昵称；不返回邮箱或用户 ID */
+            /** @description 对方用户 ID；仅参与者可见，不返回邮箱 */
+            id: string;
+            /** @description 对方公开昵称；不返回邮箱 */
             nickname: string;
             /** @description 对方公开城市 */
             city?: components["schemas"]["PassageCityDto"] | null;
@@ -997,6 +1151,75 @@ export interface components {
         };
         PassageListDto: {
             items: components["schemas"]["PassageSummaryDto"][];
+        };
+        BlockedUserDto: {
+            /** @description 被封锁用户 ID */
+            userId: string;
+            /** @description 被封锁用户公开昵称 */
+            nickname: string;
+            /** @description 封锁时间（UTC ISO 8601） */
+            blockedAt: string;
+        };
+        BlockListDto: {
+            /** @description 本人发起的封锁 */
+            items: components["schemas"]["BlockedUserDto"][];
+        };
+        BlockUserDto: {
+            /**
+             * @description 要封锁的用户 ID；不能是本人
+             * @example 9f1d5f6e-6a1d-4e8f-9f7f-5c9b8a7d6e5f
+             */
+            userId: string;
+        };
+        PenpalCityDto: {
+            /** @description 城市 ID */
+            id: string;
+            /**
+             * @description 城市名
+             * @example 里斯本
+             */
+            name: string;
+            /**
+             * @description 国家代码
+             * @example PT
+             */
+            countryCode: string;
+        };
+        PenpalCounterpartDto: {
+            /** @description 对方用户 ID */
+            id: string;
+            /** @description 对方公开昵称 */
+            nickname: string;
+            /** @description 对方公开城市 */
+            city: components["schemas"]["PenpalCityDto"] | null;
+        };
+        PenpalActiveDto: {
+            counterpart: components["schemas"]["PenpalCounterpartDto"];
+        };
+        PenpalPendingDto: {
+            counterpart: components["schemas"]["PenpalCounterpartDto"];
+        };
+        PenpalOverviewDto: {
+            /** @description 双方都已同意的信友 */
+            active: components["schemas"]["PenpalActiveDto"][];
+            /** @description 收到的持续通信请求 */
+            incoming: components["schemas"]["PenpalPendingDto"][];
+            /** @description 本人发出、等待回应的请求 */
+            outgoing: components["schemas"]["PenpalPendingDto"][];
+        };
+        PenpalConsentDto: {
+            /**
+             * @description 希望继续保持通信的用户 ID；必须是已完成共途的对方，不能是本人
+             * @example 9f1d5f6e-6a1d-4e8f-9f7f-5c9b8a7d6e5f
+             */
+            counterpartId: string;
+        };
+        PenpalConsentResultDto: {
+            /**
+             * @description 写入本人同意后的聚合状态；不暴露对方是否撤销
+             * @enum {string}
+             */
+            state: "NONE" | "ONE_SIDED" | "ACTIVE" | "REVOKED";
         };
         StoryCityDto: {
             /** @description 城市 ID */
@@ -1178,6 +1401,51 @@ export interface components {
         CityMemoryListDto: {
             /** @description 有活跃公开故事的城市；按最近公开时间倒序，不按数量排序 */
             items: components["schemas"]["CityMemoryItemDto"][];
+        };
+        PersonalMemoryDto: {
+            /** @description 个人记忆 ID */
+            id: string;
+            /**
+             * @description 标题
+             * @example 港口的风
+             */
+            title: string;
+            /**
+             * @description 正文；只返回给本人
+             * @example 傍晚的港口有一点咸味。
+             */
+            body: string;
+            /** @description 创建时间（UTC ISO 8601） */
+            createdAt: string;
+            /** @description 最后更新时间（UTC ISO 8601） */
+            updatedAt: string;
+        };
+        PersonalMemoryListDto: {
+            items: components["schemas"]["PersonalMemoryDto"][];
+        };
+        CreatePersonalMemoryDto: {
+            /**
+             * @description 标题，1–80 个字符；去首尾空白后不能为空
+             * @example 港口的风
+             */
+            title: string;
+            /**
+             * @description 正文，1–3000 个字符；去首尾空白后不能为空
+             * @example 傍晚的港口有一点咸味。
+             */
+            body: string;
+        };
+        UpdatePersonalMemoryDto: {
+            /**
+             * @description 新标题，1–80 个字符；不传表示不修改
+             * @example 港口的风（改）
+             */
+            title?: string;
+            /**
+             * @description 新正文，1–3000 个字符；不传表示不修改
+             * @example 重新整理后的片段。
+             */
+            body?: string;
         };
         HealthResponseDto: {
             /**
@@ -2143,6 +2411,210 @@ export interface operations {
             };
         };
     };
+    SafetyController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockListDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    SafetyController_block: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlockUserDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockedUserDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    SafetyController_unblock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已解除或本来不存在 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    PenpalsController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PenpalOverviewDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    PenpalsController_consent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PenpalConsentDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PenpalConsentResultDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    PenpalsController_revoke: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                counterpartId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已撤销或本来不存在 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
     MyStoriesController_list: {
         parameters: {
             query?: never;
@@ -2589,6 +3061,170 @@ export interface operations {
                 };
             };
             /** @description 主题参数不合法 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    MemoriesController_list: {
+        parameters: {
+            query?: {
+                /** @description 返回数量，1–50，默认 20 */
+                limit?: number;
+                /** @description 偏移量，默认 0 */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalMemoryListDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    MemoriesController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePersonalMemoryDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalMemoryDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    MemoriesController_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已删除 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    MemoriesController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePersonalMemoryDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalMemoryDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
             422: {
                 headers: {
                     [name: string]: unknown;

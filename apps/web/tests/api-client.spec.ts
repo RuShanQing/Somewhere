@@ -137,6 +137,32 @@ describe('API 客户端', () => {
     expect(captured[1]?.url).toBe('/api/v1/postcards/inbox?limit=5&offset=10');
   });
 
+  it('个人记忆列表携带分页参数，写操作使用 JSON 与正确方法', async () => {
+    const list = buildClient(200, { items: [] });
+    await list.client.personalMemories({ limit: 5, offset: 10 });
+
+    expect(list.captured[0]?.url).toBe('/api/v1/memories/personal?limit=5&offset=10');
+    expect(list.captured[0]?.init.method).toBe('GET');
+
+    const create = buildClient(201, { id: 'memory-1' });
+    await create.client.createPersonalMemory({ title: '海', body: '风' });
+    expect(create.captured[0]?.url).toBe('/api/v1/memories/personal');
+    expect(create.captured[0]?.init.method).toBe('POST');
+    expect(create.captured[0]?.init.body).toBe(
+      JSON.stringify({ title: '海', body: '风' }),
+    );
+
+    const update = buildClient(200, { id: 'memory-1' });
+    await update.client.updatePersonalMemory('memory 1', { title: '海' });
+    expect(update.captured[0]?.url).toBe('/api/v1/memories/personal/memory%201');
+    expect(update.captured[0]?.init.method).toBe('PATCH');
+
+    const remove = buildClient(204, undefined);
+    await remove.client.deletePersonalMemory('memory-1');
+    expect(remove.captured[0]?.url).toBe('/api/v1/memories/personal/memory-1');
+    expect(remove.captured[0]?.init.method).toBe('DELETE');
+  });
+
   it('故事列表编码城市、主题与游标，详情与我的故事路径正确', async () => {
     const { client, captured } = buildClient(200, { items: [], nextCursor: null });
 
@@ -192,5 +218,21 @@ describe('API 客户端', () => {
     expect(captured[0]?.url).toBe('/api/v1/discovery/cities?topic=%E9%9B%A8+%E5%A4%A9');
     expect(captured[0]?.init.method).toBe('GET');
     expect(captured[1]?.url).toBe('/api/v1/discovery/cities');
+  });
+
+  it('封锁接口使用 GET/POST/DELETE，解除路径编码 userId', async () => {
+    const { client, captured } = buildClient(200, { items: [] });
+
+    await client.blockedUsers();
+    await client.blockUser({ userId: 'user-2' });
+    await client.unblockUser('user/2');
+
+    expect(captured[0]?.url).toBe('/api/v1/safety/blocks');
+    expect(captured[0]?.init.method).toBe('GET');
+    expect(captured[1]?.url).toBe('/api/v1/safety/blocks');
+    expect(captured[1]?.init.method).toBe('POST');
+    expect(captured[1]?.init.body).toBe(JSON.stringify({ userId: 'user-2' }));
+    expect(captured[2]?.url).toBe('/api/v1/safety/blocks/user%2F2');
+    expect(captured[2]?.init.method).toBe('DELETE');
   });
 });

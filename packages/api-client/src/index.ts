@@ -39,6 +39,20 @@ export type PassageSummary = components['schemas']['PassageSummaryDto'];
 export type PassageList = components['schemas']['PassageListDto'];
 export type PassageProgressStatus = PassageSummary['progressStatus'];
 export type PassageConsentState = PassageSummary['me']['consentState'];
+export type BlockedUser = components['schemas']['BlockedUserDto'];
+export type BlockList = components['schemas']['BlockListDto'];
+export type BlockUserInput = components['schemas']['BlockUserDto'];
+export type PenpalCity = components['schemas']['PenpalCityDto'];
+export type PenpalCounterpart = components['schemas']['PenpalCounterpartDto'];
+export type PenpalActive = components['schemas']['PenpalActiveDto'];
+export type PenpalPending = components['schemas']['PenpalPendingDto'];
+export type PenpalOverview = components['schemas']['PenpalOverviewDto'];
+export type PenpalConsentInput = components['schemas']['PenpalConsentDto'];
+export type PenpalConsentResult = components['schemas']['PenpalConsentResultDto'];
+export type PersonalMemory = components['schemas']['PersonalMemoryDto'];
+export type PersonalMemoryList = components['schemas']['PersonalMemoryListDto'];
+export type CreatePersonalMemoryInput = components['schemas']['CreatePersonalMemoryDto'];
+export type UpdatePersonalMemoryInput = components['schemas']['UpdatePersonalMemoryDto'];
 
 export interface PostcardListParams {
   limit?: number;
@@ -130,6 +144,19 @@ export interface ApiClient {
   resumePassage(id: string): Promise<PassageSummary>;
   completePassage(id: string): Promise<PassageSummary>;
   archivePassage(id: string): Promise<PassageSummary>;
+  blockedUsers(): Promise<BlockList>;
+  blockUser(input: BlockUserInput): Promise<BlockedUser>;
+  unblockUser(userId: string): Promise<void>;
+  penpals(): Promise<PenpalOverview>;
+  consentPenpal(input: PenpalConsentInput): Promise<PenpalConsentResult>;
+  revokePenpalConsent(counterpartId: string): Promise<void>;
+  personalMemories(query?: { limit?: number; offset?: number }): Promise<PersonalMemoryList>;
+  createPersonalMemory(input: CreatePersonalMemoryInput): Promise<PersonalMemory>;
+  updatePersonalMemory(
+    id: string,
+    input: UpdatePersonalMemoryInput,
+  ): Promise<PersonalMemory>;
+  deletePersonalMemory(id: string): Promise<void>;
 }
 
 interface RequestOptions {
@@ -279,6 +306,50 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     archivePassage: (id) =>
       request<PassageSummary>(`/api/v1/passages/${encodeURIComponent(id)}/archive`, {
         method: 'POST',
+      }),
+    blockedUsers: () => request<BlockList>('/api/v1/safety/blocks'),
+    blockUser: (input) =>
+      request<BlockedUser>('/api/v1/safety/blocks', { method: 'POST', body: input }),
+    unblockUser: (userId) =>
+      request<void>(`/api/v1/safety/blocks/${encodeURIComponent(userId)}`, {
+        method: 'DELETE',
+      }),
+    penpals: () => request<PenpalOverview>('/api/v1/penpals'),
+    consentPenpal: (input) =>
+      request<PenpalConsentResult>('/api/v1/penpals/consent', {
+        method: 'POST',
+        body: input,
+      }),
+    revokePenpalConsent: (counterpartId) =>
+      request<void>(`/api/v1/penpals/${encodeURIComponent(counterpartId)}/consent`, {
+        method: 'DELETE',
+      }),
+    personalMemories: (query) => {
+      const params = new URLSearchParams();
+      if (query?.limit !== undefined) {
+        params.set('limit', String(query.limit));
+      }
+      if (query?.offset !== undefined) {
+        params.set('offset', String(query.offset));
+      }
+      const suffix = params.toString();
+      return request<PersonalMemoryList>(
+        `/api/v1/memories/personal${suffix ? `?${suffix}` : ''}`,
+      );
+    },
+    createPersonalMemory: (input) =>
+      request<PersonalMemory>('/api/v1/memories/personal', {
+        method: 'POST',
+        body: input,
+      }),
+    updatePersonalMemory: (id, input) =>
+      request<PersonalMemory>(
+        `/api/v1/memories/personal/${encodeURIComponent(id)}`,
+        { method: 'PATCH', body: input },
+      ),
+    deletePersonalMemory: (id) =>
+      request<void>(`/api/v1/memories/personal/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
       }),
   };
 }

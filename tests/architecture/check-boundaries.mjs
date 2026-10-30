@@ -20,6 +20,9 @@ const PUBLIC_MODULE_API = [
   /\/approved-story-reader\.service$/,
   /\/passage-policy\.service$/,
   /\/passage-reader\.service$/,
+  /\/block-policy\.service$/,
+  /\/penpal-policy\.service$/,
+  /\/penpal-reader\.service$/,
 ];
 
 function walk(dir, files = []) {

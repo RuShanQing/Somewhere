@@ -352,6 +352,58 @@ async function runHttpChecks() {
   assert((await deliveredDetail.json()).body === '这是一封冒烟测试明信片。', '送达后收件人读不到正文');
   pass('邮局：草稿→寄出→在途保密→Worker 只投递一次→收件人可读');
 
+  // ---- 最小封锁：收件人、发送与解除 ----
+  const blockResponse = await fetch(`${apiBase}/api/v1/safety/blocks`, {
+    method: 'POST',
+    headers: { ...origin, cookie: loginSession.pair },
+    body: JSON.stringify({ userId: recipientBody.id }),
+  });
+  assert(blockResponse.status === 200, `封锁返回 ${blockResponse.status}`);
+  assert((await blockResponse.json()).userId === recipientBody.id, '封锁响应用户不正确');
+
+  const blockedList = await fetch(`${apiBase}/api/v1/safety/blocks`, {
+    headers: { cookie: loginSession.pair },
+  });
+  const blockedListText = await blockedList.text();
+  assert(blockedList.status === 200, `封锁列表返回 ${blockedList.status}`);
+  assert(blockedListText.includes(recipientBody.id), '封锁列表缺少目标用户');
+  assert(!/"email"\s*:/.test(blockedListText), '封锁列表泄露 email');
+
+  const recipientsAfterBlock = await fetch(`${apiBase}/api/v1/postcards/recipients`, {
+    headers: { cookie: loginSession.pair },
+  });
+  const recipientsAfterBlockBody = await recipientsAfterBlock.json();
+  assert(
+    !recipientsAfterBlockBody.some((item) => item.id === recipientBody.id),
+    '封锁后收件人仍出现在列表中',
+  );
+
+  const blockedDraftResponse = await fetch(`${apiBase}/api/v1/postcards/drafts`, {
+    method: 'POST',
+    headers: { ...origin, cookie: loginSession.pair },
+    body: JSON.stringify({ recipientId: recipientBody.id, body: '封锁后不该建立。' }),
+  });
+  assert(blockedDraftResponse.status === 403, `封锁后建草稿返回 ${blockedDraftResponse.status}`);
+  assert(
+    (await blockedDraftResponse.json()).code === 'CONTACT_BLOCKED',
+    '封锁后建草稿错误码不正确',
+  );
+
+  const unblockResponse = await fetch(
+    `${apiBase}/api/v1/safety/blocks/${recipientBody.id}`,
+    { method: 'DELETE', headers: { ...origin, cookie: loginSession.pair } },
+  );
+  assert(unblockResponse.status === 204, `解除封锁返回 ${unblockResponse.status}`);
+  const recipientsAfterUnblock = await fetch(`${apiBase}/api/v1/postcards/recipients`, {
+    headers: { cookie: loginSession.pair },
+  });
+  const recipientsAfterUnblockBody = await recipientsAfterUnblock.json();
+  assert(
+    recipientsAfterUnblockBody.some((item) => item.id === recipientBody.id),
+    '解除封锁后收件人未恢复',
+  );
+  pass('最小封锁：列表/收件人/草稿拦截与解除恢复，响应无 email');
+
   // ---- 城市故事：草稿、审核、公开与撤回 ----
   const storyTitle = `冒烟城市故事 ${Date.now()}`;
   const storyBody = '雨落在旧书店的玻璃上，店里的人都没有说话，只有翻页的声音。';
@@ -564,6 +616,205 @@ async function runHttpChecks() {
     '归档后的共途仍出现在进行中列表',
   );
   pass('共途：停泊阻断 canSend，归档后退出进行中列表，响应无邮箱/坐标');
+
+  // ---- 信友：完成共途后的双向同意、邮局收件人与撤销 ----
+  // 使用不在演示白名单中的第三个账号，才能区分“信友来源”与“白名单来源”。
+  const penpalEmail = `smoke.penpal.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.test`;
+  const penpalRegistration = await fetch(`${apiBase}/api/v1/auth/register`, {
+    method: 'POST',
+    headers: origin,
+    body: JSON.stringify({
+      email: penpalEmail,
+      password,
+      nickname: '信友冒烟',
+      adultConfirmed: true,
+    }),
+  });
+  assert(penpalRegistration.status === 201, `信友账号注册返回 ${penpalRegistration.status}`);
+  const penpalAccount = await penpalRegistration.json();
+  const penpalSession = sessionCookieFrom(penpalRegistration);
+  const penpalProfile = await fetch(`${apiBase}/api/v1/profile/me`, {
+    method: 'PATCH',
+    headers: { ...origin, cookie: penpalSession.pair },
+    body: JSON.stringify({ cityId: recipientCityId, receptionMode: 'OPEN' }),
+  });
+  assert(penpalProfile.status === 200, `信友资料更新返回 ${penpalProfile.status}`);
+
+  const penpalTopic = `冒烟信友 ${Date.now()}`;
+  const penpalSeed = spawnSync(
+    'node',
+    [
+      'scripts/seed-passage.mjs',
+      '--email-a',
+      email,
+      '--email-b',
+      penpalEmail,
+      '--topic',
+      penpalTopic,
+    ],
+    { cwd: apiRoot, env, stdio: 'inherit' },
+  );
+  assert(penpalSeed.status === 0, '信友共途 seed 脚本失败');
+
+  const penpalPassageList = await fetch(`${apiBase}/api/v1/passages`, {
+    headers: { cookie: loginSession.pair },
+  });
+  const penpalPassage = (await penpalPassageList.json()).items.find(
+    (item) => item.topic === penpalTopic,
+  );
+  assert(penpalPassage, '信友共途未出现在列表');
+
+  const completePenpalPassage = await fetch(
+    `${apiBase}/api/v1/passages/${penpalPassage.id}/complete`,
+    { method: 'POST', headers: { ...origin, cookie: loginSession.pair } },
+  );
+  assert(completePenpalPassage.status === 200, `完成信友共途返回 ${completePenpalPassage.status}`);
+
+  const anonymousPenpals = await fetch(`${apiBase}/api/v1/penpals`);
+  assert(anonymousPenpals.status === 401, `匿名信友列表返回 ${anonymousPenpals.status}`);
+
+  const aConsent = await fetch(`${apiBase}/api/v1/penpals/consent`, {
+    method: 'POST',
+    headers: { ...origin, cookie: loginSession.pair },
+    body: JSON.stringify({ counterpartId: penpalAccount.id }),
+  });
+  assert(aConsent.status === 200, `A 同意信友返回 ${aConsent.status}`);
+  assert((await aConsent.json()).state === 'ONE_SIDED', '单方同意不应成为 ACTIVE');
+
+  const bConsent = await fetch(`${apiBase}/api/v1/penpals/consent`, {
+    method: 'POST',
+    headers: { ...origin, cookie: penpalSession.pair },
+    body: JSON.stringify({ counterpartId: loginBody.id }),
+  });
+  assert(bConsent.status === 200, `B 同意信友返回 ${bConsent.status}`);
+  assert((await bConsent.json()).state === 'ACTIVE', '双方同意后未成为 ACTIVE');
+
+  const penpalList = await fetch(`${apiBase}/api/v1/penpals`, {
+    headers: { cookie: loginSession.pair },
+  });
+  const penpalListText = await penpalList.text();
+  const penpalListBody = JSON.parse(penpalListText);
+  assert(
+    penpalListBody.active.some((item) => item.counterpart.id === penpalAccount.id),
+    '双方同意后信友未出现在 active 列表',
+  );
+  assert(
+    !/"email"\s*:|receptionMode|consentedAt|revokedAt/.test(penpalListText),
+    '信友列表泄露 email、接信状态或同意时间',
+  );
+
+  const penpalRecipients = await fetch(`${apiBase}/api/v1/postcards/recipients`, {
+    headers: { cookie: loginSession.pair },
+  });
+  const penpalRecipientsBody = await penpalRecipients.json();
+  assert(
+    penpalRecipientsBody.some((item) => item.id === penpalAccount.id),
+    '有效信友未进入收件人列表',
+  );
+  assert(
+    penpalRecipientsBody.some((item) => item.id === recipientBody.id),
+    '信友接入后演示白名单收件人丢失',
+  );
+
+  const revokePenpal = await fetch(
+    `${apiBase}/api/v1/penpals/${penpalAccount.id}/consent`,
+    { method: 'DELETE', headers: { ...origin, cookie: loginSession.pair } },
+  );
+  assert(revokePenpal.status === 204, `撤销信友返回 ${revokePenpal.status}`);
+
+  const penpalAfterRevoke = await fetch(`${apiBase}/api/v1/penpals`, {
+    headers: { cookie: loginSession.pair },
+  });
+  assert((await penpalAfterRevoke.json()).active.length === 0, '撤销后信友仍为 ACTIVE');
+
+  const recipientsAfterPenpalRevoke = await fetch(
+    `${apiBase}/api/v1/postcards/recipients`,
+    { headers: { cookie: loginSession.pair } },
+  );
+  assert(
+    !(await recipientsAfterPenpalRevoke.json()).some(
+      (item) => item.id === penpalAccount.id,
+    ),
+    '撤销后信友仍出现在收件人列表',
+  );
+  pass('信友：双向同意→ACTIVE→收件人→撤销，响应无邮箱/接信状态/时间');
+
+  // ---- 个人记忆：本人 CRUD、越权 404 与隐私字段 ----
+  const anonymousMemories = await fetch(`${apiBase}/api/v1/memories/personal`);
+  assert(anonymousMemories.status === 401, `匿名个人记忆列表返回 ${anonymousMemories.status}`);
+
+  const memoryTitle = `冒烟记忆 ${Date.now()}`;
+  const memoryCreate = await fetch(`${apiBase}/api/v1/memories/personal`, {
+    method: 'POST',
+    headers: { ...origin, cookie: loginSession.pair },
+    body: JSON.stringify({
+      title: memoryTitle,
+      body: '这是一段只属于本人的冒烟记忆。',
+    }),
+  });
+  assert(memoryCreate.status === 201, `创建个人记忆返回 ${memoryCreate.status}`);
+  const memoryBody = await memoryCreate.json();
+  assert(memoryBody.title === memoryTitle, '个人记忆标题不正确');
+  assert(!('ownerId' in memoryBody) && !('email' in memoryBody), '个人记忆响应泄露 ownerId/email');
+
+  const memoryList = await fetch(`${apiBase}/api/v1/memories/personal`, {
+    headers: { cookie: loginSession.pair },
+  });
+  const memoryListText = await memoryList.text();
+  const memoryListBody = JSON.parse(memoryListText);
+  assert(memoryList.status === 200, `个人记忆列表返回 ${memoryList.status}`);
+  assert(
+    memoryListBody.items.some((item) => item.id === memoryBody.id),
+    '个人记忆列表缺少本人记录',
+  );
+  assert(!/"email"\s*:|ownerId/.test(memoryListText), '个人记忆列表泄露 email/ownerId');
+
+  const memoryUpdate = await fetch(
+    `${apiBase}/api/v1/memories/personal/${memoryBody.id}`,
+    {
+      method: 'PATCH',
+      headers: { ...origin, cookie: loginSession.pair },
+      body: JSON.stringify({ title: `${memoryTitle}（改）` }),
+    },
+  );
+  assert(memoryUpdate.status === 200, `编辑个人记忆返回 ${memoryUpdate.status}`);
+  assert((await memoryUpdate.json()).title.endsWith('（改）'), '个人记忆标题未更新');
+
+  const memoryIntruder = await fetch(
+    `${apiBase}/api/v1/memories/personal/${memoryBody.id}`,
+    {
+      method: 'PATCH',
+      headers: { ...origin, cookie: recipientSession.pair },
+      body: JSON.stringify({ title: '越权修改' }),
+    },
+  );
+  assert(memoryIntruder.status === 404, `他人编辑个人记忆返回 ${memoryIntruder.status}`);
+
+  const recipientMemories = await fetch(`${apiBase}/api/v1/memories/personal`, {
+    headers: { cookie: recipientSession.pair },
+  });
+  assert(
+    !(await recipientMemories.json()).items.some((item) => item.id === memoryBody.id),
+    '他人列表出现本人的个人记忆',
+  );
+
+  const memoryDelete = await fetch(
+    `${apiBase}/api/v1/memories/personal/${memoryBody.id}`,
+    { method: 'DELETE', headers: { ...origin, cookie: loginSession.pair } },
+  );
+  assert(memoryDelete.status === 204, `删除个人记忆返回 ${memoryDelete.status}`);
+
+  const memoryAfterDelete = await fetch(`${apiBase}/api/v1/memories/personal`, {
+    headers: { cookie: loginSession.pair },
+  });
+  assert((await memoryAfterDelete.json()).items.length === 0, '删除后个人记忆仍存在');
+
+  const memoryDeleteAgain = await fetch(
+    `${apiBase}/api/v1/memories/personal/${memoryBody.id}`,
+    { method: 'DELETE', headers: { ...origin, cookie: loginSession.pair } },
+  );
+  assert(memoryDeleteAgain.status === 404, `重复删除个人记忆返回 ${memoryDeleteAgain.status}`);
+  pass('个人记忆：本人 CRUD、越权 404、响应无 email/ownerId');
 
   const wrongPassword = await fetch(`${apiBase}/api/v1/auth/login`, {
     method: 'POST',

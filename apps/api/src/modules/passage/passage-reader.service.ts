@@ -17,6 +17,11 @@ export interface PassageSendContext {
 export class PassageReader {
   constructor(private readonly passages: PassageRepository) {}
 
+  /** 信友请求资格：只返回是否存在至少一段已完成共途，不暴露主题或内容。 */
+  async hasCompletedPassageWith(userId: string, counterpartId: string): Promise<boolean> {
+    return this.passages.hasCompletedBetween(userId, counterpartId);
+  }
+
   async findSendContext(
     passageId: string,
     senderId: string,

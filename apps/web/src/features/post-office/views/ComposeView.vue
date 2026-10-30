@@ -254,10 +254,10 @@ onMounted(loadCompose);
           }}
         </p>
         <p v-else-if="recipients.length === 0 && !draftRecipientName" class="field-hint">
-          当前没有可用的演示收件人。需要把对方邮箱加入服务端白名单，并让对方在设置中选择城市。
+          当前没有可用的收件人。需要对方在设置中选择城市，或你们先成为信友。
         </p>
         <p v-else class="field-hint">
-          本阶段的收件人来自受控演示白名单，不是公开的用户搜索。
+          收件人来自受控演示白名单和你的信友，不是公开的用户搜索。
         </p>
       </div>
 

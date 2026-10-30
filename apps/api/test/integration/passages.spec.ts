@@ -44,7 +44,7 @@ interface PassageBody {
   completedAt: string | null;
   archivedAt: string | null;
   me: { consentState: ConsentState; pausedAt: string | null };
-  counterpart: { nickname: string; city: CityBody | null; consentState: ConsentState };
+  counterpart: { id: string; nickname: string; city: CityBody | null; consentState: ConsentState };
   permissions: { canSend: boolean };
 }
 
@@ -218,6 +218,7 @@ describe('PASSAGE · 共途状态与参与者许可（真实 PostgreSQL）', () 
     expect(Object.keys(passage.counterpart).sort()).toEqual([
       'city',
       'consentState',
+      'id',
       'nickname',
     ]);
     expect(Object.keys(passage.permissions)).toEqual(['canSend']);

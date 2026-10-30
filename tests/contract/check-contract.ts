@@ -99,6 +99,13 @@ try {
     '/api/v1/passages/{id}/archive',
     '/api/v1/moderation/queue',
     '/api/v1/moderation/stories/{id}/decision',
+    '/api/v1/safety/blocks',
+    '/api/v1/safety/blocks/{userId}',
+    '/api/v1/penpals',
+    '/api/v1/penpals/consent',
+    '/api/v1/penpals/{counterpartId}/consent',
+    '/api/v1/memories/personal',
+    '/api/v1/memories/personal/{id}',
   ];
   for (const path of expectedPaths) {
     if (!document.paths[path]) {
@@ -273,6 +280,15 @@ try {
     counterpart: document.components?.schemas?.PassageCounterpartDto ?? {},
     permissions: document.components?.schemas?.PassagePermissionsDto ?? {},
   });
+  const passageCounterpartSchema = JSON.stringify(
+    document.components?.schemas?.PassageCounterpartDto ?? {},
+  );
+  if (!passageCounterpartSchema.includes('"id"')) {
+    fail('共途对方契约必须包含 id，供封锁入口使用');
+  }
+  if (/"email"\s*:/.test(passageCounterpartSchema)) {
+    fail('共途对方契约不能包含 email');
+  }
   if (
     !passageSchema.includes('"progressStatus"') ||
     !passageSchema.includes('"consentState"') ||
@@ -293,6 +309,149 @@ try {
   const passageDetailSchema = responseSchemaName(document, '/api/v1/passages/{id}', 'get', '200');
   if (passageDetailSchema !== 'PassageSummaryDto') {
     fail(`共途详情响应必须使用 PassageSummaryDto，实际为 ${passageDetailSchema}`);
+  }
+
+  const blockListSchema = JSON.stringify(
+    document.components?.schemas?.BlockListDto ?? {},
+  );
+  const blockedUserSchema = JSON.stringify(
+    document.components?.schemas?.BlockedUserDto ?? {},
+  );
+  const blockInputSchema = JSON.stringify(
+    document.components?.schemas?.BlockUserDto ?? {},
+  );
+  const blockSchema = `${blockListSchema}${blockedUserSchema}${blockInputSchema}`;
+  if (
+    !blockedUserSchema.includes('"userId"') ||
+    !blockedUserSchema.includes('"nickname"') ||
+    !blockedUserSchema.includes('"blockedAt"') ||
+    !blockInputSchema.includes('"userId"')
+  ) {
+    fail('封锁契约缺少 userId、nickname 或 blockedAt');
+  }
+  if (/"email"\s*:/.test(blockSchema) || /centroidLat|centroidLon|password|session/i.test(blockSchema)) {
+    fail('封锁契约不能包含 email、坐标、密码或会话字段');
+  }
+
+  const penpalOverviewSchema = JSON.stringify(
+    document.components?.schemas?.PenpalOverviewDto ?? {},
+  );
+  const penpalCounterpartSchema = JSON.stringify(
+    document.components?.schemas?.PenpalCounterpartDto ?? {},
+  );
+  const penpalConsentInputSchema = JSON.stringify(
+    document.components?.schemas?.PenpalConsentDto ?? {},
+  );
+  const penpalResultSchema = JSON.stringify(
+    document.components?.schemas?.PenpalConsentResultDto ?? {},
+  );
+  const penpalSchema = `${penpalOverviewSchema}${penpalCounterpartSchema}${penpalConsentInputSchema}${penpalResultSchema}`;
+
+  for (const group of ['"active"', '"incoming"', '"outgoing"']) {
+    if (!penpalOverviewSchema.includes(group)) {
+      fail(`PenpalOverviewDto 缺少 ${group} 分组`);
+    }
+  }
+  if (
+    !penpalCounterpartSchema.includes('"id"') ||
+    !penpalCounterpartSchema.includes('"nickname"') ||
+    !penpalCounterpartSchema.includes('"city"')
+  ) {
+    fail('PenpalCounterpartDto 缺少 id、nickname 或 city');
+  }
+  if (!penpalConsentInputSchema.includes('"counterpartId"')) {
+    fail('PenpalConsentDto 缺少 counterpartId');
+  }
+  if (!/ONE_SIDED/.test(penpalResultSchema) || !/ACTIVE/.test(penpalResultSchema)) {
+    fail('PenpalConsentResultDto 缺少 ONE_SIDED/ACTIVE 状态');
+  }
+  if (
+    /"email"\s*:|receptionMode|password|session|centroidLat|centroidLon|consentedAt|revokedAt/i.test(
+      penpalSchema,
+    )
+  ) {
+    fail('信友契约不能包含 email、接信状态、密码、会话、坐标或同意时间');
+  }
+
+  const penpalListSchemaName = responseSchemaName(document, '/api/v1/penpals', 'get', '200');
+  if (penpalListSchemaName !== 'PenpalOverviewDto') {
+    fail(`信友列表响应必须使用 PenpalOverviewDto，实际为 ${penpalListSchemaName}`);
+  }
+  const penpalConsentSchemaName = responseSchemaName(
+    document,
+    '/api/v1/penpals/consent',
+    'post',
+    '200',
+  );
+  if (penpalConsentSchemaName !== 'PenpalConsentResultDto') {
+    fail(`信友同意响应必须使用 PenpalConsentResultDto，实际为 ${penpalConsentSchemaName}`);
+  }
+
+  const personalMemorySchema = JSON.stringify(
+    document.components?.schemas?.PersonalMemoryDto ?? {},
+  );
+  const personalMemoryListSchema = JSON.stringify(
+    document.components?.schemas?.PersonalMemoryListDto ?? {},
+  );
+  const createMemorySchema = JSON.stringify(
+    document.components?.schemas?.CreatePersonalMemoryDto ?? {},
+  );
+  const updateMemorySchema = JSON.stringify(
+    document.components?.schemas?.UpdatePersonalMemoryDto ?? {},
+  );
+  const memorySchema = `${personalMemorySchema}${personalMemoryListSchema}${createMemorySchema}${updateMemorySchema}`;
+
+  for (const field of ['"id"', '"title"', '"body"', '"createdAt"', '"updatedAt"']) {
+    if (!personalMemorySchema.includes(field)) {
+      fail(`PersonalMemoryDto 缺少 ${field}`);
+    }
+  }
+  if (!personalMemoryListSchema.includes('"items"')) {
+    fail('PersonalMemoryListDto 缺少 items');
+  }
+  if (
+    !createMemorySchema.includes('"title"') ||
+    !createMemorySchema.includes('"body"')
+  ) {
+    fail('CreatePersonalMemoryDto 缺少 title 或 body');
+  }
+  if (!updateMemorySchema.includes('"title"') || !updateMemorySchema.includes('"body"')) {
+    fail('UpdatePersonalMemoryDto 缺少 title 或 body');
+  }
+  if (
+    /"email"\s*:|ownerId|password|session|sourceType|visibility|isPublic/i.test(
+      memorySchema,
+    )
+  ) {
+    fail('个人记忆契约不能包含 email、ownerId、密码、会话、来源或公开字段');
+  }
+
+  const memoryListSchemaName = responseSchemaName(
+    document,
+    '/api/v1/memories/personal',
+    'get',
+    '200',
+  );
+  if (memoryListSchemaName !== 'PersonalMemoryListDto') {
+    fail(`个人记忆列表响应必须使用 PersonalMemoryListDto，实际为 ${memoryListSchemaName}`);
+  }
+  const memoryCreateSchemaName = responseSchemaName(
+    document,
+    '/api/v1/memories/personal',
+    'post',
+    '201',
+  );
+  if (memoryCreateSchemaName !== 'PersonalMemoryDto') {
+    fail(`个人记忆创建响应必须使用 PersonalMemoryDto，实际为 ${memoryCreateSchemaName}`);
+  }
+  const memoryUpdateSchemaName = responseSchemaName(
+    document,
+    '/api/v1/memories/personal/{id}',
+    'patch',
+    '200',
+  );
+  if (memoryUpdateSchemaName !== 'PersonalMemoryDto') {
+    fail(`个人记忆更新响应必须使用 PersonalMemoryDto，实际为 ${memoryUpdateSchemaName}`);
   }
 
   const decisionSchema = JSON.stringify(

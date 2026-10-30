@@ -44,6 +44,8 @@ export function toFriendlyAuthMessage(error: unknown): string {
         return '尝试次数过多，请稍后再试。';
       case 'ORIGIN_NOT_ALLOWED':
         return '当前页面来源不被允许，请从 Somewhere 页面重试。';
+      case 'CONTACT_BLOCKED':
+        return '当前无法与这位用户联系。若你曾封锁对方，可在设置中解除。';
       case 'SERVICE_UNAVAILABLE':
         return '服务暂时不可用，请稍后再试。';
       default:

@@ -95,6 +95,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '共途详情', requiresAuth: true, mainNav: true },
   },
   {
+    path: '/penpals',
+    name: 'penpals',
+    component: () => import('../features/penpals/views/PenpalsView.vue'),
+    meta: { title: '信友', requiresAuth: true, mainNav: true },
+  },
+  {
     path: '/memories',
     name: 'memories',
     component: () => import('../features/memories/views/MemoriesView.vue'),

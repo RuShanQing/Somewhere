@@ -47,9 +47,9 @@ export async function resetDatabase(app: INestApplication): Promise<void> {
     throw new Error('拒绝清空非测试数据库');
   }
   const prisma = app.get(PrismaService);
-  // cities 是静态目录，跨测试保留；只清空用户、故事、邮局与共途相关数据
+  // cities 是静态目录，跨测试保留；只清空用户、故事、邮局、共途与信友相关数据
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "passage_events", "passage_participants", "passages", "story_review_actions", "stories", "postcard_drafts", "postcards", "profiles", "sessions", "users" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "personal_memories", "penpal_consents", "user_blocks", "passage_events", "passage_participants", "passages", "story_review_actions", "stories", "postcard_drafts", "postcards", "profiles", "sessions", "users" RESTART IDENTITY CASCADE',
   );
 }
 
@@ -91,6 +91,9 @@ export interface PassageFixtureParticipant {
 export interface PassageFixtureInput {
   topic?: string;
   kind?: 'ONE_OFF' | 'ONGOING' | 'SEASONAL';
+  progressStatus?: 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
+  /** 归档是否发生在完成之后；默认 true，用于验证“归档但曾完成”仍具备信友资格。 */
+  wasCompleted?: boolean;
   participants: PassageFixtureParticipant[];
 }
 
@@ -107,12 +110,22 @@ export async function seedPassage(
   const id = randomUUID();
   const topic = input.topic ?? '海边的冬天';
   const kind = input.kind ?? 'ONE_OFF';
+  const progressStatus = input.progressStatus ?? 'ACTIVE';
+  const completedAt =
+    progressStatus === 'COMPLETED' ||
+    (progressStatus === 'ARCHIVED' && input.wasCompleted !== false)
+      ? new Date()
+      : null;
+  const archivedAt = progressStatus === 'ARCHIVED' ? new Date() : null;
 
   await prisma.$executeRawUnsafe(
-    'INSERT INTO "passages" ("id", "topic", "kind", "progress_status", "created_at", "updated_at") VALUES ($1::uuid, $2, $3::"PassageKind", \'ACTIVE\', NOW(), NOW())',
+    'INSERT INTO "passages" ("id", "topic", "kind", "progress_status", "completed_at", "archived_at", "created_at", "updated_at") VALUES ($1::uuid, $2, $3::"PassageKind", $4::"PassageProgressStatus", $5, $6, NOW(), NOW())',
     id,
     topic,
     kind,
+    progressStatus,
+    completedAt,
+    archivedAt,
   );
 
   for (const participant of input.participants) {

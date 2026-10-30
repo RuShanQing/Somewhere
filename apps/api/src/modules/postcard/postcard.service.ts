@@ -6,6 +6,8 @@ import type { AuthenticatedUser } from '../../common/http/request.types';
 import { AccountService } from '../auth/account.service';
 import { DeliveryPolicy } from '../delivery/delivery-policy.service';
 import { PassageReader } from '../passage/passage-reader.service';
+import { PenpalReader } from '../penpal/penpal-reader.service';
+import { BlockPolicy } from '../safety/block-policy.service';
 import { CityService } from '../profile/city.service';
 import type { MailProfile } from '../profile/profile-reader.service';
 import { ProfileReader } from '../profile/profile-reader.service';
@@ -48,6 +50,8 @@ export class PostcardService {
     private readonly cities: CityService,
     private readonly delivery: DeliveryPolicy,
     private readonly passages: PassageReader,
+    private readonly penpals: PenpalReader,
+    private readonly blocks: BlockPolicy,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -55,12 +59,14 @@ export class PostcardService {
     user: AuthenticatedUser,
     passageId?: string,
   ): Promise<RecipientResponseDto[]> {
+    const blockedIds = await this.blocks.listRelatedBlockedIds(user.id);
+
     if (passageId) {
       const context = await this.passages.findSendContext(passageId, user.id);
       if (!context) {
         throw AppError.resourceNotAccessible();
       }
-      if (!context.canSend) {
+      if (!context.canSend || blockedIds.has(context.receiverId)) {
         return [];
       }
       const profile = (await this.profiles.findMailProfiles([context.receiverId]))[0];
@@ -76,16 +82,16 @@ export class PostcardService {
       ];
     }
 
-    if (this.config.postcardDemoRecipientEmails.length === 0) {
+    const allowedIds = await this.allowedRecipientIds(user);
+    if (allowedIds.size === 0) {
       return [];
     }
-    const profiles = await this.profiles.findMailProfilesByEmails(
-      this.config.postcardDemoRecipientEmails,
-    );
+    const profiles = await this.profiles.findMailProfiles(Array.from(allowedIds));
     return profiles
       .filter(
         (profile) =>
           profile.userId !== user.id &&
+          !blockedIds.has(profile.userId) &&
           profile.receptionMode === 'OPEN' &&
           profile.city !== null,
       )
@@ -164,6 +170,9 @@ export class PostcardService {
 
     let recipientId = input.recipientId ?? null;
     if (passageContext) {
+      if (await this.blocks.isBlockedEitherDirection(user.id, passageContext.receiverId)) {
+        throw AppError.contactBlocked();
+      }
       const resolution = resolvePassageRecipient(
         passageContext.receiverId,
         input.recipientId,
@@ -173,7 +182,7 @@ export class PostcardService {
       }
       recipientId = resolution.recipientId;
     } else {
-      await this.assertDraftRecipientAllowed(input.recipientId);
+      await this.assertDraftRecipientAllowed(user, input.recipientId);
     }
 
     const draft = await this.drafts.create(
@@ -206,6 +215,9 @@ export class PostcardService {
         if (!context) {
           throw AppError.resourceNotAccessible();
         }
+        if (await this.blocks.isBlockedEitherDirection(user.id, context.receiverId)) {
+          throw AppError.contactBlocked();
+        }
         const resolution = resolvePassageRecipient(
           context.receiverId,
           input.recipientId,
@@ -215,7 +227,7 @@ export class PostcardService {
         }
         nextRecipientId = resolution.recipientId;
       } else {
-        await this.assertDraftRecipientAllowed(input.recipientId);
+        await this.assertDraftRecipientAllowed(user, input.recipientId);
       }
     }
 
@@ -261,6 +273,9 @@ export class PostcardService {
       if (!context) {
         throw AppError.resourceNotAccessible();
       }
+      if (await this.blocks.isBlockedEitherDirection(user.id, context.receiverId)) {
+        throw AppError.contactBlocked();
+      }
       if (!context.canSend) {
         throw AppError.passageStateConflict('这段共途当前不允许新的通信');
       }
@@ -271,13 +286,16 @@ export class PostcardService {
       receiverId = resolution.recipientId;
       passageId = context.passageId;
     } else {
-      const allowed = await this.allowedRecipientIds();
       if (!receiverId) {
         throw AppError.validation(['recipient:required']);
       }
       if (receiverId === user.id) {
         throw AppError.validation(['recipient:self']);
       }
+      if (await this.blocks.isBlockedEitherDirection(user.id, receiverId)) {
+        throw AppError.contactBlocked();
+      }
+      const allowed = await this.allowedRecipientIds(user);
       if (!allowed.has(receiverId)) {
         throw AppError.resourceNotAccessible();
       }
@@ -449,25 +467,30 @@ export class PostcardService {
 
   /** 草稿阶段也限制在服务端收件人来源内，避免通过草稿接口枚举其他用户。 */
   private async assertDraftRecipientAllowed(
+    user: AuthenticatedUser,
     recipientId: string | null | undefined,
   ): Promise<void> {
     if (!recipientId) {
       return;
     }
-    const allowed = await this.allowedRecipientIds();
+    if (await this.blocks.isBlockedEitherDirection(user.id, recipientId)) {
+      throw AppError.contactBlocked();
+    }
+    const allowed = await this.allowedRecipientIds(user);
     if (!allowed.has(recipientId)) {
       throw AppError.resourceNotAccessible();
     }
   }
 
-  private async allowedRecipientIds(): Promise<Set<string>> {
-    if (this.config.postcardDemoRecipientEmails.length === 0) {
-      return new Set();
-    }
-    const accounts = await this.accounts.findPublicByEmails(
-      this.config.postcardDemoRecipientEmails,
-    );
-    return new Set(accounts.map((account) => account.id));
+  private async allowedRecipientIds(user: AuthenticatedUser): Promise<Set<string>> {
+    const demoEmails = this.config.postcardDemoRecipientEmails;
+    const [accounts, penpalIds] = await Promise.all([
+      demoEmails.length > 0
+        ? this.accounts.findPublicByEmails(demoEmails)
+        : Promise.resolve([]),
+      this.penpals.listActiveCounterpartIds(user.id),
+    ]);
+    return new Set([...accounts.map((account) => account.id), ...penpalIds]);
   }
 
   private requireValidBody(raw: string): string {

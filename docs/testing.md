@@ -1,6 +1,6 @@
 # Somewhere · 测试与独立验收规则
 
-> 当前状态：**测试策略与脚本命令契约 + TASK-001～TASK-008 已落地的可运行基线**。第 1–9 节是长期约束；第 11 节记录认证、城市与资料、邮局、城市故事、世界记忆地图、共途与共途发信任务实际实现的命令与实测结果。除第 11 节列出的已验证能力外，不得据此声称其他业务测试已经通过。
+> 当前状态：**测试策略与脚本命令契约 + TASK-001～TASK-011 已落地的可运行基线**。第 1–9 节是长期约束；第 11 节记录认证、城市与资料、邮局、城市故事、世界记忆地图、共途、共途发信、封锁、信友与个人记忆任务实际实现的命令与实测结果。除第 11 节列出的已验证能力外，不得据此声称其他业务测试已经通过。
 
 ## 1. 测试的目标
 
@@ -187,7 +187,7 @@ Notes: ...
 
 新增业务功能时，重复运行上述稳定基线，并逐步将 SMOKE-03～05 提升为默认门禁。旧功能不能因“新版 AI 更擅长”而减少验证。
 
-## 11. TASK-001～TASK-008 落地状态（2026-10-29 实测）
+## 11. TASK-001～TASK-009 落地状态（2026-10-29 实测）
 
 命令契约已全部实现，且 `pnpm verify` 会串行执行下列门禁并对任一失败返回非 0。证据目录会读取 `tasks/current.md` 中的任务编号，自动写入 `artifacts/verification/<TASK-ID>/`。
 
@@ -197,12 +197,12 @@ Notes: ...
 | `pnpm lint` | 根 `eslint.config.mjs`（TS + Vue + 测试） | PASS |
 | `pnpm typecheck` | `apps/api` tsc、`apps/web` vue-tsc、`packages/api-client` tsc | PASS |
 | `pnpm build` | Nest（tsc，保留装饰器元数据）+ Vite 构建 | PASS |
-| `pnpm test:unit` | 后端 15 文件 / 92 用例；Web 8 文件 / 48 用例（Vitest + SWC） | PASS |
-| `pnpm test:integration` | 8 文件 / 80 用例，NestJS HTTP + 真实 `somewhere_test` 数据库，跑前 `prisma migrate deploy` 与城市种子 | PASS |
-| `pnpm test:contract` | 导出 OpenAPI → `openapi-typescript` → 与提交的 `packages/api-client/src/generated.ts` 比对；覆盖 30 条路径，断言故事公开、地图聚合与共途契约无邮箱/作者 ID/坐标/接信状态 | PASS |
+| `pnpm test:unit` | 后端 18 文件 / 115 用例；Web 10 文件 / 64 用例（Vitest + SWC） | PASS |
+| `pnpm test:integration` | 11 文件 / 111 用例，NestJS HTTP + 真实 `somewhere_test` 数据库，跑前 `prisma migrate deploy` 与城市种子 | PASS |
+| `pnpm test:contract` | 导出 OpenAPI → `openapi-typescript` → 与提交的 `packages/api-client/src/generated.ts` 比对；覆盖 37 条路径，断言故事公开、地图聚合、共途、封锁、信友与个人记忆契约无邮箱/作者 ID/坐标/接信状态/所有者 ID | PASS |
 | `pnpm test:architecture` | `tests/architecture/check-boundaries.mjs`：跨层/跨模块导入、Prisma 访问边界、浏览器存储禁令；只允许公开 Module/Guard/Service | PASS |
-| `pnpm test:e2e` | Playwright 20 用例，真实 API + PostgreSQL + Vite + Chrome；含故事草稿/审核/公开/撤回、地图城市入口、邮局闭环与共途停泊/续程/完成/归档 | PASS |
-| `pnpm test:smoke` | 构建产物 + 真实 HTTP 17 项检查（含故事闭环、地图与故事站同源、邮局闭环与 Worker 只投递一次、共途状态） | PASS |
+| `pnpm test:e2e` | Playwright 23 用例，真实 API + PostgreSQL + Vite + Chrome；含故事、地图、邮局、共途、封锁、信友、个人记忆与移动端路径 | PASS |
+| `pnpm test:smoke` | 构建产物 + 真实 HTTP 20 项检查（含故事闭环、地图同源、邮局闭环、共途状态、最小封锁、信友与个人记忆） | PASS |
 | `pnpm verify` | 串行聚合 9 个子门禁，日志写入 `artifacts/verification/<TASK-ID>/verify/<时间戳>/` | PASS（exit 0） |
 
 测试隔离与安全：
@@ -281,6 +281,40 @@ TASK-008 增补（共途通信许可接入邮局）：
 - 红灯证据：单元因模块不存在失败（`red/red-postcard-passage-unit.log`）；集成新增 8 条中 7 条失败、既有 73 条通过（`red/red-postcard-passage-api.log`）。
 - 聚合门禁有效性证明：把 `PassageReader.canSend` 临时改为 `true` 后，lint、integration 与 Smoke 判 FAIL、`pnpm verify` exit 1（`red/verify-failure-proof.log`）。E2E 未捕获该注入，因为详情页入口使用 `PassageService` 的展示许可；两条路径分别由集成测试覆盖。恢复后重新 PASS。
 
+TASK-009 增补（最小封锁）：
+
+- 实测：后端单元 16 文件 / 97 用例（新增 5）、Web 单元 8 文件 / 49 用例（新增 1）、集成 9 文件 / 87 用例（新增 7）、契约 32 条路径（新增 2）、Playwright 21 用例（新增 1）、Smoke 18 项（新增 1），全部通过；`pnpm verify` 9/9 PASS、exit 0。
+- 集成新增 7 条：匿名 401、封锁与列表幂等/无 email、默认收件人与共途草稿拦截、共途 `canSend` 与解除恢复、反向封锁发送 403、封锁不改参与者与历史、自己对自己 422 与目标不存在 404。
+- 契约：`PassageCounterpartDto` 增加 `id`，并显式断言不包含 email；新增 `/safety/blocks` GET/POST/DELETE 契约。
+- E2E：`safety.spec.ts` 从共途寄出 → 封锁 → 写信入口消失 → 设置中解除 → 恢复，并检查 390px 无横向溢出。
+- Smoke：新增封锁列表、收件人排除、草稿 403、解除恢复与无 email 检查。
+- RED：单元测试先因 `safety/domain/block-policy` 不存在失败；集成新增 7 条均因 `/safety/blocks` 404 失败，随后最小实现转绿。
+- 聚合门禁有效性证明：临时把 `BlockRepository.findBetween` 改为只检查单向封锁，`test:integration` FAIL、`pnpm verify` exit 1；E2E 与 Smoke 因未覆盖该方向仍 PASS，说明集成层捕获了旁路遗漏。日志 `artifacts/verification/TASK-009/red/verify-failure-proof.log`。恢复后重新运行全量门禁。
+
+TASK-010 增补（双向信友与邮局接入）：
+
+- 实测：后端单元 17 文件 / 109 用例（新增 1 文件 / 12 用例）、Web 单元 9 文件 / 55 用例（新增 1 文件 / 6 用例）、集成 10 文件 / 102 用例（新增 1 文件 / 15 用例）、契约 35 条路径（新增 3 条）、Playwright 22 用例（新增 1 条）、Smoke 19 项（新增 1 项），全部通过。
+- 单元：`derivePenpalStatus` 的 `NONE/ONE_SIDED/ACTIVE/REVOKED` 矩阵、`toPenpalView` 的三种列表归类、封锁覆盖、单方同意不可继续联系、资格判断；`PenpalPolicy` 以替身验证双方 ALLOW 且无封锁才允许继续联系。
+- 集成新增 15 条：匿名 401；单方同意只出现在 outgoing/incoming；双方同意 ACTIVE 且重复同意不改变 `consentedAt`；并发同意不产生重复行或单方 ACTIVE；撤销/重复撤销与历史保留；拒绝收到的请求写入 REVOKED 且 `consentedAt` 为空；撤销后重新同意恢复 ACTIVE；正向/反向封锁隐藏列表、请求 403、解除后恢复；自我 422、目标不存在/无完成共途/非参与者 404；归档但曾完成仍具资格；第三方与 ADMIN 看不到他人关系；有效信友进入邮局收件人并可寄信，撤销后 404、封锁后 403；非 `OPEN` 信友不出现在收件人列表；数据库拒绝自指、重复与状态时间不一致的行。
+- 契约：新增 `/api/v1/penpals`、`/api/v1/penpals/consent`、`/api/v1/penpals/{counterpartId}/consent`；`PenpalOverviewDto` 断言三组分组，`PenpalCounterpartDto` 只含 `id/nickname/city`，并显式断言不含 email、`receptionMode`、密码、会话、坐标、`consentedAt`、`revokedAt`。
+- E2E：`penpals.spec.ts` 从完成共途 → A 请求 → B 在 `/penpals` 同意 → 双方 ACTIVE → 写信收件人包含信友 → A 封锁后列表消失 → 设置解除恢复 → 撤销后列表与收件人均消失；390px 无横向溢出；共途页信友入口可聚焦。
+- Smoke：使用不在演示白名单中的第三个虚构账号，验证「双向同意 → ACTIVE → 加入收件人 → 撤销 → 移出收件人」，同时确认原演示白名单收件人仍在；响应无 email、接信状态或同意时间。
+- RED：单元因 `penpal/domain/penpal-policy` 不存在失败；集成 14 条因 `/penpals` 404 失败、1 条数据库约束用例通过（`artifacts/verification/TASK-010/red/red-penpal-unit.log`、`red/red-penpal-api.log`）。
+- 测试基础设施：集成与 E2E 清库列表加入 `penpal_consents`；`seedPassage` 支持 `COMPLETED` 与“已完成后再归档”夹具；架构白名单允许 `penpal-policy.service` 与 `penpal-reader.service`。
+- 聚合门禁有效性证明：临时让 `PenpalService.list` 忽略封锁过滤，`test:integration` 与 `test:e2e` FAIL、`pnpm verify` exit 1；日志 `artifacts/verification/TASK-010/red/verify-failure-proof.log`。恢复后重新运行全量门禁，9/9 PASS。
+
+TASK-011 增补（个人记忆 CRUD 与私有边界）：
+
+- 实测：后端单元 18 文件 / 115 用例（新增 1 文件 / 6 用例）、Web 单元 10 文件 / 64 用例（新增 1 文件 / 8 用例，并补充 1 条 API 客户端用例）、集成 11 文件 / 111 用例（新增 1 文件 / 9 用例）、契约 37 条路径（新增 2 条）、Playwright 23 用例（新增 1 条）、Smoke 20 项（新增 1 项），全部通过。
+- 单元：标题 1/80/81、正文 1/3000/3001、全空白/换行/制表符、emoji 码点、空更新、去首尾空白。
+- 集成新增 9 条：匿名四个接口 401；创建后只返回本人列表且字段无 email/ownerId；标题/正文边界与空更新；编辑更新 `updatedAt` 与排序；删除只删除本人记录且共途/明信片不变；非本人/ADMIN/非法 UUID 统一 404；共途与信友关系不让渡读取权；分页与非法分页参数；数据库拒绝空白与超长标题/正文。
+- 契约：新增 `/api/v1/memories/personal` 与 `/api/v1/memories/personal/{id}`；`PersonalMemoryDto` 只含 `id/title/body/createdAt/updatedAt`，显式断言不含 email、ownerId、密码、会话、来源或公开字段。
+- E2E：`memories.spec.ts` 创建 → 刷新保持 → 编辑 → 390px 无横向溢出 → 焦点可用 → 删除 → 另一账号看不到；双城日记与共同手帐仍显示诚实空态。
+- Smoke：匿名 401、创建/列表/编辑/删除、他人 PATCH 404、他人列表不含本人记录、响应无 email/ownerId。
+- RED：单元因 `memory/domain/personal-memory` 不存在失败；集成 8 条因 `/memories/personal` 404 失败、1 条数据库约束用例最初因表缺失误通过，迁移后改为真实空白/超长约束验证。
+- 测试基础设施：集成清库与测试库重置脚本加入 `personal_memories`；第 11 次迁移在测试库应用。
+- 聚合门禁有效性证明：临时让 `MemoryRepository.listByOwner` 忽略 `ownerId`，`test:integration`、`test:e2e` 与 `test:smoke` FAIL、`pnpm verify` exit 1；日志 `artifacts/verification/TASK-011/red/verify-failure-proof.log`。恢复后重新运行全量门禁，9/9 PASS。
+
 证据目录：
 
 - 最终全量：`artifacts/verification/<TASK-ID>/final-verify.log`
@@ -294,8 +328,11 @@ TASK-008 增补（共途通信许可接入邮局）：
 - TASK-006 最终证据：`artifacts/verification/TASK-006/verify/2026-10-29T07-04-34-277Z/`、`artifacts/verification/TASK-006/final-verify.log`
 - TASK-007 最终证据：`artifacts/verification/TASK-007/verify/2026-10-29T08-08-19-988Z/`、`artifacts/verification/TASK-007/final-verify.log`
 - TASK-008 最终证据：`artifacts/verification/TASK-008/verify/2026-10-29T08-32-54-678Z/`、`artifacts/verification/TASK-008/final-verify.log`
+- TASK-009 最终证据：`artifacts/verification/TASK-009/verify/2026-10-29T13-45-48-601Z/`；失败证明 `artifacts/verification/TASK-009/red/verify-failure-proof.log`
+- TASK-010 最终证据：`artifacts/verification/TASK-010/verify/2026-10-30T06-25-41-779Z/`、`artifacts/verification/TASK-010/final-verify.log`；失败证明 `artifacts/verification/TASK-010/red/verify-failure-proof.log`
+- TASK-011 最终证据：`artifacts/verification/TASK-011/verify/2026-10-30T06-44-14-925Z/`、`artifacts/verification/TASK-011/final-verify.log`；失败证明 `artifacts/verification/TASK-011/red/verify-failure-proof.log`
 
-尚未启用：SMOKE-05（关系与记忆权限）中的共途停泊 / 归档与共途发信许可已由 TASK-007 / TASK-008 的 E2E 与 Smoke 覆盖，但完整 SMOKE-05 仍需信友、纪念册与封锁实现后再纳入门禁；SMOKE-04 的故事站与地图两部分已由 TASK-005 / TASK-006 启用。举报、封锁、通知与 CI 流水线同样未实现。E2E 目前使用本机 Chrome（`channel: chrome`），CI 需改为 `pnpm exec playwright install chromium` 或提供等效浏览器。
+尚未启用：SMOKE-05（关系与记忆权限）中的共途停泊 / 归档、共途发信许可、最小封锁、信友授权与个人记忆私有边界已由 TASK-007～TASK-011 的 E2E 与 Smoke 覆盖；完整 SMOKE-05 仍需双城日记实现后才能纳入门禁。SMOKE-04 的故事站与地图两部分已由 TASK-005 / TASK-006 启用。举报、通用安全处置、`RESTRICT`、通知、双城日记、共同手帐与 CI 流水线仍未实现。E2E 目前使用本机 Chrome（`channel: chrome`），CI 需改为 `pnpm exec playwright install chromium` 或提供等效浏览器。
 
 ## 12. 角色与权限测试计划（规划，未执行）
 
@@ -353,3 +390,69 @@ pnpm verify
 ```
 
 当前状态：**NOT RUN**。本文件只记录规划，不代表角色功能已实现或测试已通过。
+
+## 13. TASK-012 / TASK-013 规划测试（未执行）
+
+> 2026-10-30 记录。TASK-012 尚未开始编码；以下用例与命令均为 **NOT RUN**，不得写成已通过。
+
+### 13.1 TASK-012 回信
+
+单元：
+
+- 回信资格矩阵：查看者为收件人、原信 `DELIVERED`、原信有 `passageId`、无既有回信、未封锁、`canSend` 为真时才允许。
+- 正文 1/2000/2001 与全空白、emoji 码点；`replyToPostcardId` 不可通过 PATCH 修改。
+
+集成：
+
+- 匿名 401；原信在途 / 非参与者 / 回复自己的信 / 原信无共途 / 重复回信 / 停泊 / 封锁的返回码与“不落库”。
+- 合法回信写入 `recipientId`、`passageId`、`reply_to_postcard_id`；客户端传第三人 422。
+- 并发两封回信只成功一封；失败不消耗草稿与每日额度。
+- `GET /postcards/:id` 的 `canReply` 只在收件人、已送达、共途、无封锁、可发送时为真。
+
+契约：
+
+- `CreatePostcardDraftDto` 增 `replyToPostcardId`；`PostcardDetailDto` 增 `passageId`、`canReply`；响应白名单不含 email、坐标、`receptionMode`、角色。
+
+E2E / Smoke：
+
+- 共途寄信 → 推进到期 + Worker → 收件人回信 → 推进到期 + Worker；停泊后回信入口消失；390px 无横向溢出。
+- Smoke 覆盖 401、合法回信、停泊 409、重复回信 409、响应无 email。
+
+### 13.2 TASK-013 双城日记（依赖 TASK-012）
+
+单元：
+
+- 配对纯函数：`right.replyTo = left.id`、两封 `DELIVERED`、同 `passageId`、不同作者、`left` 早于 `right`。
+- 可读矩阵：参与者 × 两封状态（`DELIVERED`/`IN_TRANSIT`/`RESTRICTED`）× 是否封锁。
+
+集成：
+
+- 只有一封送达不生成；两封送达恰好一页；Worker 连续两次、并发两次仍一页。
+- 列表只返回元数据且只含本人可读页；详情含两封正文；第三人、`ADMIN`、非法 UUID 404。
+- 任一封 `RESTRICTED` 后详情 404、列表隐藏；归档/完成/停泊/撤销信友后仍可读。
+- 相邻两页共享一封信时，两页都能读取且正文只存一份。
+
+契约：
+
+- 新增 `/memories/diaries` 与 `/memories/diaries/{id}`；列表无正文字段；详情字段白名单无 email、userId、ownerId、坐标。
+
+E2E / Smoke：
+
+- 双向交换 → 双方在 `/memories` 看到同一页 → 打开双页 → 第三人 404 → 归档后仍可读 → 390px 无横向溢出。
+
+### 13.3 门禁
+
+```text
+pnpm lint
+pnpm typecheck
+pnpm build
+pnpm test:unit
+pnpm test:integration
+pnpm test:contract
+pnpm test:architecture
+pnpm test:e2e
+pnpm test:smoke
+pnpm verify
+```
+
+当前状态：**NOT RUN**。
