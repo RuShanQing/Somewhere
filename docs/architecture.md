@@ -1,6 +1,6 @@
 # Somewhere · 工程架构（目标架构）
 
-状态：**目标架构 + TASK-001～TASK-011 已落地的最小切片 + TASK-012 已确认范围**。`apps/web`、`apps/api`、`packages/api-client`、`users`/`sessions`/`cities`/`profiles`/`postcard_drafts`/`postcards`/`stories`/`story_review_actions`/`passages`/`passage_participants`/`passage_events`/`user_blocks`/`penpal_consents`/`personal_memories`、认证 API、城市目录、最小资料、邮局三栏、明信片草稿/发送/Worker 投递、城市故事草稿/提交/管理员审核/公开故事站、世界记忆地图业务入口、共途状态与邮局通信许可接入、最小封锁、双向信友与个人记忆已完成；共途邀请/创建、双城日记、共同手帐、通知、举报、完整安全处置与角色扩展仍是设计，仓库中不存在对应业务实现。TASK-012（共途回信）与 TASK-013（双城日记）已确认范围与依赖方向，但**尚未编码、未新增表列**。技术栈以本科毕设、Web 优先、单人可持续维护为原则。本文是架构约束，不是地图视觉实现说明。
+状态：**目标架构 + TASK-001～TASK-011 已落地的最小切片 + TASK-012 已确认范围**。`apps/web`、`apps/api`、`packages/api-client`、`users`/`sessions`/`cities`/`profiles`/`postcard_drafts`/`postcards`/`stories`/`story_review_actions`/`passages`/`passage_participants`/`passage_events`/`user_blocks`/`penpal_consents`/`personal_memories`、认证 API、城市目录、最小资料、邮局三栏、明信片草稿/发送/Worker 投递、城市故事草稿/提交/管理员审核/公开故事站、世界记忆地图业务入口、共途状态与邮局通信许可接入、最小封锁、双向信友与个人记忆已完成；共途邀请/创建、双城日记、共同手帐、通知、举报、完整安全处置与角色扩展仍是设计，仓库中不存在对应业务实现。TASK-012（共途回信）已实现并验收；TASK-013（双城日记）已确认范围与依赖方向，但**尚未编码、未新增表**。技术栈以本科毕设、Web 优先、单人可持续维护为原则。本文是架构约束，不是地图视觉实现说明。
 
 ## 1. 架构目标与优先级
 
@@ -68,7 +68,7 @@ somewhere/
 |---|---|---|
 | AuthModule | 注册、登录、会话、身份和角色 | `SessionGuard`, `SessionService`, `AccountService`；规划中的 `RoleService` 负责角色变更与审计 |
 | ProfileModule | 昵称、城市、接信状态 | `CityService`, `ProfileReader` |
-| PostcardModule | 草稿、发送、在途、收信、投递状态；TASK-012 规划回信引用 | `PostcardService`, `PostcardDeliveryService`；规划 `PostcardReader`（只读窄接口，供 MemoryModule 读取已送达内容，不暴露正文给非参与者） |
+| PostcardModule | 草稿、发送、在途、收信、投递状态；TASK-012 已实现回信引用 | `PostcardService`, `PostcardDeliveryService`；规划 `PostcardReader`（只读窄接口，供 TASK-013 的 MemoryModule 读取已送达内容，不暴露正文给非参与者） |
 | DeliveryModule | 距离与延迟纯策略 | `DeliveryPolicy` |
 | StoryModule | 城市故事及审核状态 | `ApprovedStoryReader` |
 | DiscoveryModule | 发现入口、主题筛选、世界记忆地图城市聚合 | 组合 `ApprovedStoryReader` + `CityService`；只读；不复制故事表、不新增可见性条件 |
@@ -382,15 +382,23 @@ TASK-004 未实现回信、`passage_id`、`reply_to_postcard_id`、模板/多媒
 - Web：`/memories` 保留双城日记与共同手帐的诚实空态，新增个人记忆表单、列表、编辑、删除确认、四态、390px 与键盘可用。
 - 仍未实现：双城日记、共同手帐、`source_type/source_id`、公开/分享/导出、通知、举报与角色扩展。
 
-### 13.14 TASK-012 / TASK-013 规划（未实现）
+### 13.14 TASK-012 共途回信实现（2026-10-30）
+
+- 数据表：`postcards.reply_to_postcard_id` 与 `postcard_drafts.reply_to_postcard_id` 均可空，自引用外键 `ON DELETE RESTRICT`，检查 `reply_to_postcard_id <> id`；`postcards` 侧唯一索引（可空列允许多个 NULL）保证一张原信最多一封回信；迁移 `20261030120000_add_postcard_reply` 只新增列、约束与索引。
+- 领域：`postcard/domain/reply.ts` 的 `replyBlockReason` 是纯函数，按“自己的信 → 非收件人 → 未送达 → 非共途 → 封锁 → 共途不可发送 → 已回信”返回原因；错误码新增 `POSTCARD_ALREADY_REPLIED`（409）。
+- API：`POST /postcards/drafts` 接受可选 `replyToPostcardId`，服务端从原信推导收件人与 `passageId`，客户端传入只做一致性校验；`PATCH` 不接受该字段；`POST /drafts/:id/send` 在发送事务前重新校验；并发回信由唯一索引兜底并映射为 409。
+- 读接口：`GET /postcards/:id` 增加 `passageId` 与 `canReply`；`canReply` 只在查看者是收件人、原信 `DELIVERED`、属于共途、双方未封锁、`canSend` 为真且尚未回信时为 true。
+- Web：详情页在 `canReply` 为真时显示「回信」，跳转 `/post-office/compose?replyToPostcardId=`；写信页从原信恢复收件人与共途，收件人只读。
+- 本轮未实现：链式回信的专门展示、通知、举报、角色扩展；共途邀请/创建仍不提供 `POST /passages`。
+
+### 13.15 TASK-013 双城日记规划（未实现）
 
 > 2026-10-30 确认范围。以下能力尚未编码，不得当作已实现。
 
-- TASK-012 回信：`postcards` 与 `postcard_drafts` 新增可空 `reply_to_postcard_id`；`postcards` 侧部分唯一索引保证一张原信最多一封回信；`GET /postcards/:id` 增加 `passageId` 与 `canReply`；新增错误码 `POSTCARD_ALREADY_REPLIED`（409）。回信只允许共途内、已送达、查看者为收件人的信。
-- TASK-013 双城日记：新增 `diary_pages(passage_id, postcard_left_id, postcard_right_id, created_at)`；`left` 为被回信的原信，`right` 为回信；每次完整交换一张只读双页，不向同一页追加。
+- 数据表：`diary_pages(passage_id, postcard_left_id, postcard_right_id, created_at)`；`left` 为被回信的原信，`right` 为回信；每次完整交换一张只读双页，不向同一页追加。
 - 跨模块方向：`MemoryModule → PostcardModule.PostcardReader`（只读窄接口），`PostcardModule` **不得**反向依赖 `MemoryModule`。`PostcardReader` 只返回两封均已 `DELIVERED` 且查看者是参与者的窄数据；正文不进入 `diary_pages`。
 - 生成时机：Worker 组合根在 `PostcardDeliveryService.deliverDue()` 之后调用 `MemoryService.generateDueDiaries()`；投递失败与日记生成失败互不回滚，靠唯一键与下一轮扫描补生成。
-- 尚未实现：日记删除、公开/分享/导出、通知、举报与角色扩展；共途邀请/创建仍不提供 `POST /passages`。
+- 尚未实现：日记删除、公开/分享/导出、通知、举报与角色扩展。
 
 ## 14. 角色与权限规划（未实现）
 

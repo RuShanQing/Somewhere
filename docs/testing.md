@@ -391,9 +391,9 @@ pnpm verify
 
 当前状态：**NOT RUN**。本文件只记录规划，不代表角色功能已实现或测试已通过。
 
-## 13. TASK-012 / TASK-013 规划测试（未执行）
+## 13. TASK-012 实施记录与 TASK-013 规划测试
 
-> 2026-10-30 记录。TASK-012 尚未开始编码；以下用例与命令均为 **NOT RUN**，不得写成已通过。
+> 2026-10-30 记录。TASK-012 已实现并验收；TASK-013 仍为规划，未运行。
 
 ### 13.1 TASK-012 回信
 
@@ -418,7 +418,12 @@ E2E / Smoke：
 - 共途寄信 → 推进到期 + Worker → 收件人回信 → 推进到期 + Worker；停泊后回信入口消失；390px 无横向溢出。
 - Smoke 覆盖 401、合法回信、停泊 409、重复回信 409、响应无 email。
 
-### 13.2 TASK-013 双城日记（依赖 TASK-012）
+实测（2026-10-30）：后端单元 19 文件 / 123 用例（新增 1 文件 / 8 用例）；Web 单元 10 文件 / 65 用例（新增 1 条 API 客户端用例）；集成 12 文件 / 120 用例（新增 1 文件 / 9 用例）；契约 37 条路径（字段新增，路径数不变）；Playwright 24 用例（新增 1 条）；Smoke 21 项（新增 1 项）；`pnpm verify` 9/9 PASS、exit 0。
+
+- 红灯证据：`artifacts/verification/TASK-012/red/red-reply-unit.log`（模块不存在）、`red/red-reply-api.log`（8 条失败 / 1 条通过）。
+- 故障注入：临时让 `alreadyReplied` 恒为 false，`test:integration`、`test:e2e`、`test:smoke` FAIL、`pnpm verify` exit 1；日志 `artifacts/verification/TASK-012/red/verify-failure-proof.log`。恢复后全量门禁重新 PASS。
+
+### 13.2 TASK-013 双城日记（依赖已具备，未执行）
 
 单元：
 
@@ -455,4 +460,4 @@ pnpm test:smoke
 pnpm verify
 ```
 
-当前状态：**NOT RUN**。
+当前状态：TASK-012 **PASS**；TASK-013 **NOT RUN**。

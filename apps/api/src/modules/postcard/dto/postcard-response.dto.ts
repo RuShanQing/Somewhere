@@ -51,6 +51,13 @@ export class PostcardDraftResponseDto {
   })
   passageId!: string | null;
 
+  @ApiPropertyOptional({
+    description: '被回信的明信片 ID；不是回信时为 null，创建后不可改绑',
+    type: String,
+    nullable: true,
+  })
+  replyToPostcardId!: string | null;
+
   @ApiProperty({ description: '最后更新时间（UTC ISO 8601）' })
   updatedAt!: string;
 }
@@ -148,6 +155,19 @@ export class PostcardDetailDto {
     enum: ['IN_TRANSIT', 'DELIVERED', 'RESTRICTED'],
   })
   status!: 'IN_TRANSIT' | 'DELIVERED' | 'RESTRICTED';
+
+  @ApiPropertyOptional({
+    description: '所属共途 ID；非共途信为 null',
+    type: String,
+    nullable: true,
+  })
+  passageId!: string | null;
+
+  @ApiProperty({
+    description:
+      '当前用户此刻能否回信；只有收件人、已送达、属于共途且双方允许新通信时为 true',
+  })
+  canReply!: boolean;
 
   @ApiPropertyOptional({
     description: '正文；无权阅读或受限态为 null',

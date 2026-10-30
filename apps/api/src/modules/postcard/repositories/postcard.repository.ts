@@ -9,6 +9,7 @@ export interface SendFromDraftInput {
   body: string;
   receiverId: string;
   passageId: string | null;
+  replyToPostcardId: string | null;
   originCityId: string;
   destinationCityId: string;
   sentAt: Date;
@@ -45,6 +46,14 @@ export class PostcardRepository {
   async findIdempotent(senderId: string, key: string): Promise<Postcard | null> {
     return this.prisma.postcard.findFirst({
       where: { senderId, idempotencyKey: key },
+    });
+  }
+
+  /** 一张原信最多一封回信；这里只判断是否已经存在，唯一性由数据库兜底。 */
+  async findReplyByTarget(targetId: string): Promise<{ id: string } | null> {
+    return this.prisma.postcard.findFirst({
+      where: { replyToPostcardId: targetId },
+      select: { id: true },
     });
   }
 
@@ -117,6 +126,7 @@ export class PostcardRepository {
             senderId: input.ownerId,
             receiverId: input.receiverId,
             passageId: input.passageId,
+            replyToPostcardId: input.replyToPostcardId,
             body: input.body,
             originCityId: input.originCityId,
             destinationCityId: input.destinationCityId,
@@ -138,14 +148,18 @@ export class PostcardRepository {
         return { postcard, created: true };
       });
     } catch (error) {
-      if (
-        input.idempotencyKey &&
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        const existing = await this.findIdempotent(input.ownerId, input.idempotencyKey);
-        if (existing) {
-          return { postcard: existing, created: false };
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const target = Array.isArray(error.meta?.target)
+          ? error.meta.target.join(',')
+          : String(error.meta?.target ?? '');
+        if (target.includes('reply_to_postcard_id')) {
+          throw AppError.postcardAlreadyReplied();
+        }
+        if (input.idempotencyKey) {
+          const existing = await this.findIdempotent(input.ownerId, input.idempotencyKey);
+          if (existing) {
+            return { postcard: existing, created: false };
+          }
         }
       }
       throw error;

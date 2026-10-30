@@ -5,15 +5,15 @@
 
 > 实现状态（2026-10-28，TASK-004）：已实现文字草稿 CRUD、发送事务、Haversine + `min(7200, 720 + ceil(D*60/150))` 延迟、城市快照、`IN_TRANSIT → DELIVERED` Worker、草稿/幂等键防重复、在途正文保密与每日 10 张上限。
 >
-> TASK-004 的明确边界：收件人来自服务端环境变量白名单（`POSTCARD_DEMO_RECIPIENT_EMAILS`），不是正式共途/信友关系；未实现回信、`passage_id`、`reply_to_postcard_id`、模板、通知、审核/封锁处置。`RESTRICTED` 已保留为枚举并拒绝正文，但当前没有写入路径。Worker 只负责投递，不生成通知。
+> TASK-004 的明确边界：收件人来自服务端环境变量白名单（`POSTCARD_DEMO_RECIPIENT_EMAILS`），不是正式共途/信友关系；未实现回信、`passage_id`、`reply_to_postcard_id`、模板、通知、审核/封锁处置。`RESTRICTED` 已保留为枚举并拒绝正文，但当前没有写入路径。Worker 只负责投递，不生成通知。上述边界中的 `passage_id`、回信与 `reply_to_postcard_id` 已分别由 TASK-008 / TASK-012 实现。
 >
-> TASK-008 实现状态（2026-10-29）：`postcard_drafts` 与 `postcards` 增加可空 `passage_id`；带 `passageId` 的草稿由服务端把收件人解析为共途对方，发送时强制 `PassagePolicy.canSend`（停泊 / 关闭 / 非 ACTIVE 返回 409）。无 `passageId` 的草稿继续走演示白名单，TASK-004 行为不变。回信、通知与审核处置仍未实现。
+> TASK-008 实现状态（2026-10-29）：`postcard_drafts` 与 `postcards` 增加可空 `passage_id`；带 `passageId` 的草稿由服务端把收件人解析为共途对方，发送时强制 `PassagePolicy.canSend`（停泊 / 关闭 / 非 ACTIVE 返回 409）。无 `passageId` 的草稿继续走演示白名单，TASK-004 行为不变。回信已由 TASK-012 实现，通知与审核处置仍未实现。
 >
 > TASK-009 实现状态（2026-10-29）：新增 `user_blocks` 与最小封锁接口。默认收件人与共途收件人排除被封锁者；草稿创建/修改指向被封锁者返回 403 `CONTACT_BLOCKED`；发送前先判封锁（403），再判共途许可（409）；不创建明信片、不消耗草稿或每日额度。封锁不删除历史，已送达信件的读取权不变。
 >
 > TASK-010 实现状态（2026-10-30）：默认收件人来源扩展为「演示白名单 ∪ 当前 `ACTIVE` 信友」。信友由 `PenpalReader.listActiveCounterpartIds` 提供，已排除任一方向封锁；撤销或封锁后下一次收件人列表与发送立即失效。未新增 `penpal_id` 草稿字段，发送事务、距离延迟、幂等、每日上限与在途保密规则不变。
 >
-> TASK-012 规划（2026-10-30，**未实现**）：新增共途内回信能力与 `reply_to_postcard_id`。回信只允许针对「已送达、属于共途、自己是收件人」的信；收件人与 `passageId` 由服务端从原信推导；一张原信最多一次回信。详见 POSTCARD-09。双城日记仍不在本文件范围。
+> TASK-012 实现（2026-10-30）：新增共途内回信能力与 `reply_to_postcard_id`。回信只允许针对「已送达、属于共途、自己是收件人」的信；收件人与 `passageId` 由服务端从原信推导；一张原信最多一次回信。详见 POSTCARD-09。双城日记仍不在本文件范围。
 
 ## POSTCARD-01 用例
 
@@ -126,9 +126,9 @@ TASK-010 的信友来源：无 `passageId` 时，允许收件人集合为「演�
 - 后端权限检查覆盖作者、收件人、封锁、安全处置和已到达状态。
 - 只有经正确授权、已送达的信，才能成为双城日记的来源。
 
-## POSTCARD-09 回信（TASK-012 规划，未实现）
+## POSTCARD-09 回信（TASK-012 已实现）
 
-> 2026-10-30 确认范围，代码与迁移均未开始。本节不改变 POSTCARD-01～08 的既有行为。
+> 2026-10-30 实现并验收。本节不改变 POSTCARD-01～08 的既有行为。
 
 ### 9.1 目标与边界
 
@@ -144,7 +144,7 @@ TASK-010 的信友来源：无 `passageId` 时，允许收件人集合为「演�
 - `postcard_drafts.reply_to_postcard_id UUID NULL` → `postcards(id)` `ON DELETE RESTRICT`，索引；创建后不可改。
 - `postcards.reply_to_postcard_id UUID NULL` → `postcards(id)` `ON DELETE RESTRICT`。
 - `CHECK (reply_to_postcard_id <> id)`。
-- 部分唯一索引 `UNIQUE (reply_to_postcard_id) WHERE reply_to_postcard_id IS NOT NULL`：一张原信最多一封回信。
+- 唯一索引 `UNIQUE (reply_to_postcard_id)`：一张原信最多一封回信。PostgreSQL 的唯一索引允许任意多个 NULL，因此非空引用只出现一次，既有信件无需回填。
 - 草稿不建唯一索引：允许放弃草稿后重建，最终唯一性由发送时的明信片约束保证。
 
 ### 9.3 API 与状态码
@@ -155,6 +155,8 @@ TASK-010 的信友来源：无 `passageId` 时，允许收件人集合为「演�
 | PATCH | `/api/v1/postcards/drafts/:id` | 仍只接受 `body/recipientId`；提交 `replyToPostcardId` 视为非法字段（422） |
 | GET | `/api/v1/postcards/:id` | 增加 `passageId: string \| null`、`canReply: boolean` |
 | POST | `/api/v1/postcards/drafts/:id/send` | 发送前重新校验回信资格，成功后写入 `reply_to_postcard_id` |
+
+响应字段：`PostcardDraftResponseDto` 增加 `replyToPostcardId`；`PostcardDetailDto` 增加 `passageId` 与 `canReply`。错误码新增 `POSTCARD_ALREADY_REPLIED`（409）。
 
 创建草稿的校验顺序（置于既有“本人草稿 → 已发送幂等返回”之后）：
 

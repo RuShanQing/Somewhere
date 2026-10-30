@@ -10,6 +10,7 @@ export type ErrorCode =
   | 'RESOURCE_NOT_ACCESSIBLE'
   | 'STORY_STATE_CONFLICT'
   | 'PASSAGE_STATE_CONFLICT'
+  | 'POSTCARD_ALREADY_REPLIED'
   | 'CONTACT_BLOCKED'
   | 'SERVICE_UNAVAILABLE'
   | 'INTERNAL_ERROR';
@@ -66,6 +67,10 @@ export class AppError extends Error {
 
   static passageStateConflict(message = '共途当前状态不允许此操作'): AppError {
     return new AppError('PASSAGE_STATE_CONFLICT', 409, message);
+  }
+
+  static postcardAlreadyReplied(): AppError {
+    return new AppError('POSTCARD_ALREADY_REPLIED', 409, '这封信已经回过一次了');
   }
 
   static contactBlocked(): AppError {

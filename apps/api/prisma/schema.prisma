@@ -162,23 +162,26 @@ model Profile {
 }
 
 model PostcardDraft {
-  id             String   @id @default(uuid()) @db.Uuid
-  ownerId        String   @map("owner_id") @db.Uuid
-  recipientId    String?  @map("recipient_id") @db.Uuid
-  passageId      String?  @map("passage_id") @db.Uuid
-  body           String   @db.VarChar(2000)
-  sentPostcardId String?  @unique @map("sent_postcard_id") @db.Uuid
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                String   @id @default(uuid()) @db.Uuid
+  ownerId           String   @map("owner_id") @db.Uuid
+  recipientId       String?  @map("recipient_id") @db.Uuid
+  passageId         String?  @map("passage_id") @db.Uuid
+  replyToPostcardId String?  @map("reply_to_postcard_id") @db.Uuid
+  body              String   @db.VarChar(2000)
+  sentPostcardId    String?  @unique @map("sent_postcard_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   owner        User      @relation("DraftOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   recipient    User?     @relation("DraftRecipient", fields: [recipientId], references: [id], onDelete: SetNull)
   passage      Passage?  @relation("DraftPassage", fields: [passageId], references: [id], onDelete: Restrict)
+  replyTo      Postcard? @relation("DraftReplyTarget", fields: [replyToPostcardId], references: [id], onDelete: Restrict)
   sentPostcard Postcard? @relation("DraftSentPostcard", fields: [sentPostcardId], references: [id], onDelete: Restrict)
 
   @@index([ownerId, updatedAt])
   @@index([recipientId])
   @@index([passageId])
+  @@index([replyToPostcardId])
   @@map("postcard_drafts")
 }
 
@@ -187,6 +190,7 @@ model Postcard {
   senderId          String         @map("sender_id") @db.Uuid
   receiverId        String         @map("receiver_id") @db.Uuid
   passageId         String?        @map("passage_id") @db.Uuid
+  replyToPostcardId String?        @map("reply_to_postcard_id") @db.Uuid
   body              String         @db.VarChar(2000)
   status            PostcardStatus @default(IN_TRANSIT)
   originCityId      String         @map("origin_city_id") @db.Uuid
@@ -198,14 +202,18 @@ model Postcard {
   createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  sender          User           @relation("PostcardSender", fields: [senderId], references: [id], onDelete: Restrict)
-  receiver        User           @relation("PostcardReceiver", fields: [receiverId], references: [id], onDelete: Restrict)
-  passage         Passage?       @relation("PostcardPassage", fields: [passageId], references: [id], onDelete: Restrict)
-  originCity      City           @relation("PostcardOrigin", fields: [originCityId], references: [id], onDelete: Restrict)
-  destinationCity City           @relation("PostcardDestination", fields: [destinationCityId], references: [id], onDelete: Restrict)
-  sourceDraft     PostcardDraft? @relation("DraftSentPostcard")
+  sender          User            @relation("PostcardSender", fields: [senderId], references: [id], onDelete: Restrict)
+  receiver        User            @relation("PostcardReceiver", fields: [receiverId], references: [id], onDelete: Restrict)
+  passage         Passage?        @relation("PostcardPassage", fields: [passageId], references: [id], onDelete: Restrict)
+  originCity      City            @relation("PostcardOrigin", fields: [originCityId], references: [id], onDelete: Restrict)
+  destinationCity City            @relation("PostcardDestination", fields: [destinationCityId], references: [id], onDelete: Restrict)
+  sourceDraft     PostcardDraft?  @relation("DraftSentPostcard")
+  replyTo         Postcard?       @relation("PostcardReply", fields: [replyToPostcardId], references: [id], onDelete: Restrict)
+  replies         Postcard[]      @relation("PostcardReply")
+  replyDrafts     PostcardDraft[] @relation("DraftReplyTarget")
 
   @@unique([senderId, idempotencyKey])
+  @@unique([replyToPostcardId])
   @@index([receiverId, status, deliverAt])
   @@index([status, deliverAt])
   @@index([senderId, status])

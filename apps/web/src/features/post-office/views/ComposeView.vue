@@ -5,6 +5,7 @@ import {
   api,
   ApiError,
   type PassageSummary,
+  type PostcardDetail,
   type PostcardRecipient,
 } from '../../../shared/api/client';
 import { toFriendlyAuthMessage } from '../../../shared/api/error-message';
@@ -21,6 +22,7 @@ const draftId = ref<string | null>(
 );
 const recipients = ref<PostcardRecipient[]>([]);
 const passage = ref<PassageSummary | null>(null);
+const replyTarget = ref<PostcardDetail | null>(null);
 const draftRecipientName = ref<string | null>(null);
 const recipientId = ref('');
 const body = ref('');
@@ -42,12 +44,15 @@ const canSubmit = computed(
 const recipientIsListed = computed(() =>
   recipients.value.some((recipient) => recipient.id === recipientId.value),
 );
+const pageTitle = computed(() =>
+  replyTarget.value ? '写一封会慢慢抵达的回信' : '写一张会慢慢抵达的明信片',
+);
 
 async function handleUnauthorized(error: unknown): Promise<boolean> {
   if (error instanceof ApiError && error.status === 401) {
     const redirect = draftId.value
       ? `/post-office/compose/${draftId.value}`
-      : '/post-office/compose';
+      : route.fullPath;
     await router.replace({ name: 'login', query: { redirect } });
     return true;
   }
@@ -66,7 +71,12 @@ async function loadCompose(): Promise<void> {
   loadError.value = null;
   const queryPassageId =
     typeof route.query.passageId === 'string' ? route.query.passageId : null;
+  const queryReplyToPostcardId =
+    typeof route.query.replyToPostcardId === 'string'
+      ? route.query.replyToPostcardId
+      : null;
   let boundPassageId: string | null = queryPassageId;
+  let replyTargetId: string | null = queryReplyToPostcardId;
 
   try {
     if (draftId.value) {
@@ -75,6 +85,17 @@ async function loadCompose(): Promise<void> {
       recipientId.value = draft.recipient?.id ?? '';
       draftRecipientName.value = draft.recipient?.nickname ?? null;
       boundPassageId = draft.passageId ?? boundPassageId;
+      replyTargetId = draft.replyToPostcardId ?? replyTargetId;
+    }
+
+    if (replyTargetId) {
+      const target = await api.postcardDetail(replyTargetId);
+      if (!draftId.value && !target.canReply) {
+        loadError.value = '这封信现在不能回信，可能已经回过、已停泊或不属于共途。';
+        return;
+      }
+      replyTarget.value = target;
+      boundPassageId = target.passageId ?? boundPassageId;
     }
 
     if (boundPassageId) {
@@ -129,6 +150,7 @@ async function saveDraft(): Promise<string | null> {
       : await api.createPostcardDraft({
           ...payload,
           ...(passage.value ? { passageId: passage.value.id } : {}),
+          ...(replyTarget.value ? { replyToPostcardId: replyTarget.value.id } : {}),
         });
 
     draftId.value = draft.id;
@@ -208,7 +230,7 @@ onMounted(loadCompose);
   <div class="page page-narrow">
     <PageHeader
       eyebrow="邮局 · 写信"
-      title="写一张会慢慢抵达的明信片"
+      :title="pageTitle"
       description="正文会被保存成一封不可修改的信，到达时间由两座城市之间的距离决定。"
     />
 
@@ -221,6 +243,9 @@ onMounted(loadCompose);
 
     <form v-else class="section-card compose-form" novalidate @submit.prevent="requestSend">
       <div v-if="passage" class="passage-compose-context">
+        <p v-if="replyTarget" class="form-success" role="status">
+          回复 {{ replyTarget.sender.nickname }} 的明信片
+        </p>
         <p class="form-success" role="status">这段共途 · {{ passage.topic }}</p>
         <p class="field-hint">
           收件人由这段共途决定：{{ passage.counterpart.nickname }}。寄出后仍按双方城市距离计算到达时间。

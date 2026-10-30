@@ -235,4 +235,16 @@ describe('API 客户端', () => {
     expect(captured[2]?.url).toBe('/api/v1/safety/blocks/user%2F2');
     expect(captured[2]?.init.method).toBe('DELETE');
   });
+
+  it('回信草稿把 replyToPostcardId 作为 JSON 提交，不改路径', async () => {
+    const { client, captured } = buildClient(201, { id: 'draft-1' });
+
+    await client.createPostcardDraft({ body: '回信正文', replyToPostcardId: 'postcard-1' });
+
+    expect(captured[0]?.url).toBe('/api/v1/postcards/drafts');
+    expect(captured[0]?.init.method).toBe('POST');
+    expect(captured[0]?.init.body).toBe(
+      JSON.stringify({ body: '回信正文', replyToPostcardId: 'postcard-1' }),
+    );
+  });
 });

@@ -1,6 +1,6 @@
 # 当前开发任务 · TASK-012
 
-状态：**READY（范围已确认，尚未开始编码）**
+状态：**DONE（TASK-012 已完成并通过门禁，等待下一任务指令）**
 
 任务名称：**PAS-02 收尾：共途回信与回信引用**
 
@@ -57,7 +57,7 @@
 - `postcard_drafts.reply_to_postcard_id UUID NULL` → `postcards(id)` `ON DELETE RESTRICT`，索引；
 - `postcards.reply_to_postcard_id UUID NULL` → `postcards(id)` `ON DELETE RESTRICT`；
 - `CHECK (reply_to_postcard_id <> id)`；
-- 部分唯一索引 `UNIQUE (reply_to_postcard_id) WHERE reply_to_postcard_id IS NOT NULL`，保证一张原信最多一封回信。
+- 唯一索引 `UNIQUE (reply_to_postcard_id)`：PostgreSQL 允许任意多个 NULL，非空引用只出现一次，保证一张原信最多一封回信。
 
 不新增表，不改既有列，不改任何既有行。`postcard_drafts` 不建唯一索引：草稿可以放弃后重建，最终唯一性由发送时的明信片约束决定。
 
@@ -113,13 +113,13 @@
 
 ## 5. 工作拆分
 
-- [ ] `T12-01` 本文档、`specs/05`、`specs/09`、`docs/architecture.md`、`docs/testing.md` 口径。
-- [ ] `T12-02` RED：单元资格矩阵、集成 8–10 条、契约字段、E2E、Smoke，并保存失败证据。
-- [ ] `T12-03` 迁移：两个可空列、自引用外键、检查约束、部分唯一索引。
-- [ ] `T12-04` 后端：`domain/reply.ts`、仓储查询、`PostcardService` 校验、DTO、`ErrorCode` 扩展。
-- [ ] `T12-05` 重新生成 OpenAPI 客户端并更新契约检查。
-- [ ] `T12-06` Web：详情回信入口与写信页回信模式。
-- [ ] `T12-07` E2E、Smoke、全量 `pnpm verify`、失败证明与证据归档。
+- [x] `T12-01` 本文档、`specs/05`、`specs/09`、`docs/architecture.md`、`docs/testing.md` 口径。
+- [x] `T12-02` RED：单元资格矩阵、集成 9 条、契约字段、E2E、Smoke，并保存失败证据。
+- [x] `T12-03` 迁移：两个可空列、自引用外键、检查约束、唯一索引。
+- [x] `T12-04` 后端：`domain/reply.ts`、仓储查询、`PostcardService` 校验、DTO、`ErrorCode` 扩展。
+- [x] `T12-05` 重新生成 OpenAPI 客户端并更新契约检查。
+- [x] `T12-06` Web：详情回信入口与写信页回信模式。
+- [x] `T12-07` E2E、Smoke、全量 `pnpm verify`、失败证明与证据归档。
 
 ## 6. 验收条件
 
@@ -149,7 +149,7 @@ Given 收件人打开已送达共途信；When 点击回信、填写正文、发
 
 ### AC-07 · 数据库与回归
 
-只有一次新增迁移；空库 `migrate deploy` 可重放；外键、检查约束、部分唯一索引存在；TASK-001～011 全部测试保持通过；`pnpm lint`、`typecheck`、`build`、`test:unit`、`test:integration`、`test:contract`、`test:architecture`、`test:e2e`、`test:smoke`、`pnpm verify` 实际运行并 exit 0；故障注入后返回非 0 并恢复。
+只有一次新增迁移；空库 `migrate deploy` 可重放；外键、检查约束、唯一索引存在；TASK-001～011 全部测试保持通过；`pnpm lint`、`typecheck`、`build`、`test:unit`、`test:integration`、`test:contract`、`test:architecture`、`test:e2e`、`test:smoke`、`pnpm verify` 实际运行并 exit 0；故障注入后返回非 0 并恢复。
 
 ## 7. 开发步骤
 
@@ -161,19 +161,39 @@ Given 收件人打开已送达共途信；When 点击回信、填写正文、发
 6. Web 回信入口与写信页。
 7. E2E、Smoke、全量回归、失败证明与证据归档。
 
-## 8. 执行记录（待填写）
+## 8. 执行记录（实测）
 
 | 字段 | 当前值 |
 |---|---|
-| 开始时间 | 未开始 |
-| 环境 | 待记录 |
-| 代码变更 | 无 |
-| 新增 / 更新测试 | 无 |
-| 实际运行命令 | 未运行 |
-| 通过项 | 未运行 |
-| 未通过 / 阻塞 | 尚未开始编码 |
-| 验收结论 | **NOT_STARTED** |
+| 开始时间 | 2026-10-30（UTC+8） |
+| 环境 | macOS；Node v24.20.0；pnpm 12.15.0；PostgreSQL 17.11；Playwright 1.64.1 + 本机 Chrome |
+| 代码变更 | `schema.prisma` 与迁移 `20261030120000_add_postcard_reply`；`postcard/domain/reply.ts`；`PostcardService` 回信校验与 `canReply`；`PostcardRepository` / `DraftRepository`；DTO；`ErrorCode.POSTCARD_ALREADY_REPLIED`；Web 详情回信入口与写信页回信模式；契约检查；E2E 与 Smoke |
+| 新增 / 更新测试 | 后端单元 19 文件 / 123 用例（新增 1 文件 / 8 用例）；Web 单元 10 文件 / 65 用例（新增 1 条）；集成 12 文件 / 120 用例（新增 1 文件 / 9 用例）；契约 37 条路径（字段新增，路径数不变）；Playwright 24 用例（新增 1 条）；Smoke 21 项（新增 1 项） |
+| 实际运行命令 | `pnpm lint`、`pnpm typecheck`、`pnpm build`、`pnpm test:unit`、`pnpm test:integration`、`pnpm test:contract`、`pnpm test:architecture`、`pnpm test:e2e`、`pnpm test:smoke`、`pnpm verify`；故障注入后再次 `pnpm verify` |
+| 通过项 | 全部命令 exit 0；`pnpm verify` 9/9 PASS；证据 `artifacts/verification/TASK-012/final-verify.log`、`artifacts/verification/TASK-012/verify/2026-10-30T10-07-50-445Z` |
+| 未通过 / 阻塞 | 首轮集成 2 条失败：回复自己的信期望 422、实现返回 404；封锁接口实际返回 200、测试期望 201。前者新增 `OWN_POSTCARD` 原因并映射 422，后者修正测试期望；复跑通过。无遗留阻塞 |
+| 验收结论 | **DONE · PASS** |
+
+### 8.1 验收证据（实测）
+
+| 验收项 | 证据 | 结果 |
+|---|---|---|
+| AC-01 回信草稿 | 集成：收件人、`passageId`、`replyToPostcardId` 由服务端解析；客户端传第三人或另一共途 422；响应无 email/坐标 | PASS |
+| AC-02 资格边界 | 集成：在途/非参与者 404，自己的信/非共途 422，重复回信 409，停泊 409，封锁 403，均不落库 | PASS |
+| AC-03 发送与落库 | 集成：`reply_to_postcard_id` 落库，同城 720 分钟，送达前收件人 404，草稿已消费 | PASS |
+| AC-04 唯一与并发 | 集成：同一原信并发两封只成功一封（201/409），数据库只有 1 行回信 | PASS |
+| AC-05 接口与隐私 | 集成：`canReply` 随送达、停泊/续程、已回信变化；`PATCH` 改绑 422；响应无 email/坐标/接信状态 | PASS |
+| AC-06 Web | E2E：A 寄出 → 推进送达 → B 回信 → 推进送达 → A 阅读；390px 无横向溢出；停泊后入口消失（集成） | PASS |
+| AC-07 数据库与回归 | `prepare-test-db` 显示 12 次迁移；测试库可重放；`pnpm verify` 9/9 PASS；故障注入后 exit 1 | PASS |
+
+补充说明：
+
+- RED：单元因 `postcard/domain/reply` 不存在失败（`artifacts/verification/TASK-012/red/red-reply-unit.log`）；集成 8 条失败、1 条因字段白名单 422 误通过（`red/red-reply-api.log`）。
+- 失败证明：临时让 `alreadyReplied` 恒为 false，`test:integration`、`test:e2e`、`test:smoke` FAIL、`pnpm verify` exit 1；日志 `artifacts/verification/TASK-012/red/verify-failure-proof.log`。恢复后重新运行全量门禁，9/9 PASS。
+- 契约：`CreatePostcardDraftDto.replyToPostcardId`、`PostcardDraftResponseDto.replyToPostcardId`、`PostcardDetailDto.passageId/canReply`；显式断言不含 email、坐标、`receptionMode` 或角色。
+- 测试基础设施：集成清库沿用既有顺序；本次未新增表，`reset-test-db.mjs` 无需改动。
+- 仍未实现：双城日记（TASK-013）、共途邀请/创建、通知、举报、`RESTRICTED` 写入口、角色扩展。
 
 ## 9. 下一步
 
-完成 TASK-012 并通过门禁后，再评估 TASK-013 双城日记（MEMORY-02/03）。不自动进入下一任务。
+完成 TASK-012 后，再评估 TASK-013 双城日记（MEMORY-02/03）。不自动进入下一任务。

@@ -565,6 +565,111 @@ async function runHttpChecks() {
   assert(!/"email"\s*:/.test(passageListText), '共途列表泄露 email');
   assert(!/centroidLat|centroidLon|receptionMode/.test(passageListText), '共途列表泄露坐标或接信状态');
 
+  // ---- 回信：共途引用、收件人解析、送达与重复回信 ----
+  const replyOriginalDraftResponse = await fetch(`${apiBase}/api/v1/postcards/drafts`, {
+    method: 'POST',
+    headers: { ...origin, cookie: loginSession.pair },
+    body: JSON.stringify({ body: '冒烟回信的原信。', passageId: seededPassage.id }),
+  });
+  assert(
+    replyOriginalDraftResponse.status === 201,
+    `回信原信草稿返回 ${replyOriginalDraftResponse.status}`,
+  );
+  const replyOriginalDraft = await replyOriginalDraftResponse.json();
+
+  const replyOriginalSendResponse = await fetch(
+    `${apiBase}/api/v1/postcards/drafts/${replyOriginalDraft.id}/send`,
+    {
+      method: 'POST',
+      headers: {
+        ...origin,
+        cookie: loginSession.pair,
+        'Idempotency-Key': `smoke-reply-original-${Date.now()}`,
+      },
+    },
+  );
+  assert(
+    replyOriginalSendResponse.status === 201,
+    `回信原信寄出返回 ${replyOriginalSendResponse.status}`,
+  );
+  const replyOriginal = await replyOriginalSendResponse.json();
+
+  const advanceReplyOriginal = spawnSync(
+    'node',
+    ['scripts/test-advance-postcard.mjs', replyOriginal.postcardId],
+    { cwd: apiRoot, env, stdio: 'inherit' },
+  );
+  assert(advanceReplyOriginal.status === 0, '回信原信推进送达失败');
+
+  const originalDetailForReceiver = await fetch(
+    `${apiBase}/api/v1/postcards/${replyOriginal.postcardId}`,
+    { headers: { cookie: recipientSession.pair } },
+  );
+  const originalDetailForReceiverBody = await originalDetailForReceiver.json();
+  assert(
+    originalDetailForReceiver.status === 200,
+    `原信收件人详情返回 ${originalDetailForReceiver.status}`,
+  );
+  assert(originalDetailForReceiverBody.canReply === true, '收件人看不到回信资格');
+
+  const replyDraftResponse = await fetch(`${apiBase}/api/v1/postcards/drafts`, {
+    method: 'POST',
+    headers: { ...origin, cookie: recipientSession.pair },
+    body: JSON.stringify({
+      body: '冒烟回信正文。',
+      replyToPostcardId: replyOriginal.postcardId,
+    }),
+  });
+  assert(replyDraftResponse.status === 201, `回信草稿返回 ${replyDraftResponse.status}`);
+  const replyDraft = await replyDraftResponse.json();
+  assert(replyDraft.replyToPostcardId === replyOriginal.postcardId, '回信草稿未保存引用');
+  assert(replyDraft.recipient?.id === loginBody.id, '回信收件人没有解析为原信寄件人');
+  assert(!/"email"\s*:/.test(JSON.stringify(replyDraft)), '回信草稿泄露 email');
+
+  const replySendResponse = await fetch(
+    `${apiBase}/api/v1/postcards/drafts/${replyDraft.id}/send`,
+    {
+      method: 'POST',
+      headers: {
+        ...origin,
+        cookie: recipientSession.pair,
+        'Idempotency-Key': `smoke-reply-${Date.now()}`,
+      },
+    },
+  );
+  assert(replySendResponse.status === 201, `回信寄出返回 ${replySendResponse.status}`);
+  const replySend = await replySendResponse.json();
+
+  const duplicateReply = await fetch(`${apiBase}/api/v1/postcards/drafts`, {
+    method: 'POST',
+    headers: { ...origin, cookie: recipientSession.pair },
+    body: JSON.stringify({ body: '第二次回信。', replyToPostcardId: replyOriginal.postcardId }),
+  });
+  assert(duplicateReply.status === 409, `重复回信返回 ${duplicateReply.status}`);
+  assert(
+    (await duplicateReply.json()).code === 'POSTCARD_ALREADY_REPLIED',
+    '重复回信错误码不正确',
+  );
+
+  const advanceReply = spawnSync(
+    'node',
+    ['scripts/test-advance-postcard.mjs', replySend.postcardId],
+    { cwd: apiRoot, env, stdio: 'inherit' },
+  );
+  assert(advanceReply.status === 0, '回信推进送达失败');
+
+  const replyDetailForSender = await fetch(
+    `${apiBase}/api/v1/postcards/${replySend.postcardId}`,
+    { headers: { cookie: loginSession.pair } },
+  );
+  const replyDetailForSenderBody = await replyDetailForSender.json();
+  assert(
+    replyDetailForSender.status === 200,
+    `回信送达后原寄件人详情返回 ${replyDetailForSender.status}`,
+  );
+  assert(replyDetailForSenderBody.body === '冒烟回信正文。', '回信送达后原寄件人读不到正文');
+  pass('回信：共途引用、收件人解析、送达、重复回信 409 与响应无 email');
+
   const pauseResponse = await fetch(`${apiBase}/api/v1/passages/${seededPassage.id}/pause`, {
     method: 'POST',
     headers: { ...origin, cookie: loginSession.pair },

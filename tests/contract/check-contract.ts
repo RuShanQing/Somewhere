@@ -196,6 +196,9 @@ try {
   if (!detailSchema.includes('"body"') || !detailSchema.includes('DELIVERED')) {
     fail('PostcardDetailDto 缺少正文或送达状态');
   }
+  if (!detailSchema.includes('"passageId"') || !detailSchema.includes('"canReply"')) {
+    fail('PostcardDetailDto 必须包含可空 passageId 与服务端计算的 canReply');
+  }
   if (/"email"\s*:/.test(detailSchema)) {
     fail('PostcardDetailDto 不能包含 email');
   }
@@ -209,12 +212,18 @@ try {
   if (!draftSchema.includes('"passageId"')) {
     fail('草稿契约必须包含可空 passageId，供共途上下文回显');
   }
+  if (!draftSchema.includes('"replyToPostcardId"')) {
+    fail('草稿契约必须包含可空 replyToPostcardId，供回信上下文回显');
+  }
 
   const createDraftSchema = JSON.stringify(
     document.components?.schemas?.CreatePostcardDraftDto ?? {},
   );
   if (!createDraftSchema.includes('"passageId"')) {
     fail('创建草稿契约必须接受可选 passageId');
+  }
+  if (!createDraftSchema.includes('"replyToPostcardId"')) {
+    fail('创建草稿契约必须接受可选 replyToPostcardId');
   }
 
   const recipientsOperation = document.paths['/api/v1/postcards/recipients']?.get as

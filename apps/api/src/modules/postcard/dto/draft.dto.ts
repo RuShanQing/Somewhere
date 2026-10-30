@@ -28,6 +28,16 @@ export class CreatePostcardDraftDto {
   @IsOptional()
   @IsUUID('4', { message: '共途 ID 不合法' })
   passageId?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      '被回信的明信片 ID；提供后收件人与共途由原信推导，创建后不可改绑',
+    type: String,
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUUID('4', { message: '回信目标不合法' })
+  replyToPostcardId?: string | null;
 }
 
 export class UpdatePostcardDraftDto {

@@ -36,6 +36,7 @@ interface DraftBody {
   id: string;
   recipient: { id: string; nickname: string } | null;
   body: string;
+  replyToPostcardId: string | null;
   updatedAt: string;
 }
 
@@ -226,10 +227,12 @@ describe('POSTCARD · 草稿、距离延迟、在途保密与投递（真实 Pos
       'id',
       'passageId',
       'recipient',
+      'replyToPostcardId',
       'updatedAt',
     ]);
     expect(created.body).toBe('第一封慢信');
     expect(created.recipient).toBeNull();
+    expect(created.replyToPostcardId).toBeNull();
 
     const list = await server()
       .get('/api/v1/postcards/drafts')

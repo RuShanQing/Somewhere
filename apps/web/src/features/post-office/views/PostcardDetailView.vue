@@ -38,6 +38,7 @@ const statusLabel = computed(() =>
   detail.value ? postcardStatusLabel(detail.value.status) : '',
 );
 const isDelivered = computed(() => detail.value?.status === 'DELIVERED');
+const canReply = computed(() => detail.value?.canReply === true);
 const viewerId = computed(() => auth.user?.id ?? '');
 const otherUser = computed(() => {
   if (!detail.value || !viewerId.value) {
@@ -179,10 +180,21 @@ onMounted(() => {
       </dl>
 
       <p v-if="isDelivered && detail.body !== null" class="field-hint letter-afterword">
-        读完后不必急着回复。回信会在共途阶段开放。
+        {{
+          canReply
+            ? '这是一封已经抵达的共途来信。回信会在双方仍允许新的通信时，按同样的距离慢慢抵达。'
+            : '读完后不必急着回复。回信只在这封信属于共途、且双方仍允许新的通信时开放。'
+        }}
       </p>
 
       <div class="form-actions detail-actions">
+        <RouterLink
+          v-if="canReply"
+          class="button"
+          :to="{ name: 'compose', query: { replyToPostcardId: postcardId } }"
+        >
+          回信
+        </RouterLink>
         <RouterLink class="button button-quiet" :to="{ name: 'post-office' }">返回邮局</RouterLink>
       </div>
 

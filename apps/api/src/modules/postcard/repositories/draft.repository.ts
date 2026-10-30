@@ -16,9 +16,10 @@ export class DraftRepository {
     body: string,
     recipientId: string | null,
     passageId: string | null,
+    replyToPostcardId: string | null,
   ): Promise<PostcardDraft> {
     return this.prisma.postcardDraft.create({
-      data: { ownerId, body, recipientId, passageId },
+      data: { ownerId, body, recipientId, passageId, replyToPostcardId },
     });
   }
 

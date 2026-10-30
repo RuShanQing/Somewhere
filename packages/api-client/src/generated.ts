@@ -1005,6 +1005,8 @@ export interface components {
             body: string;
             /** @description 绑定的共途 ID；未绑定为 null，创建后不可改绑 */
             passageId?: string | null;
+            /** @description 被回信的明信片 ID；不是回信时为 null，创建后不可改绑 */
+            replyToPostcardId?: string | null;
             /** @description 最后更新时间（UTC ISO 8601） */
             updatedAt: string;
         };
@@ -1018,6 +1020,8 @@ export interface components {
             recipientId?: string | null;
             /** @description 共途 ID；提供后收件人由服务端解析为共途对方，创建后不可改绑 */
             passageId?: string | null;
+            /** @description 被回信的明信片 ID；提供后收件人与共途由原信推导，创建后不可改绑 */
+            replyToPostcardId?: string | null;
         };
         UpdatePostcardDraftDto: {
             /**
@@ -1069,6 +1073,10 @@ export interface components {
              * @enum {string}
              */
             status: "IN_TRANSIT" | "DELIVERED" | "RESTRICTED";
+            /** @description 所属共途 ID；非共途信为 null */
+            passageId?: string | null;
+            /** @description 当前用户此刻能否回信；只有收件人、已送达、属于共途且双方允许新通信时为 true */
+            canReply: boolean;
             /** @description 正文；无权阅读或受限态为 null */
             body?: string | null;
             /** @description 服务端发送时间（UTC ISO 8601） */

@@ -14,6 +14,7 @@ import { ProfileReader } from '../profile/profile-reader.service';
 import { validatePostcardBody } from './domain/body';
 import { normalizeIdempotencyKey } from './domain/idempotency';
 import { resolvePassageRecipient } from './domain/passage-binding';
+import { replyBlockReason, type ReplyBlockReason } from './domain/reply';
 import {
   canReadPostcardBody,
   postcardRoleFor,
@@ -161,35 +162,60 @@ export class PostcardService {
   ): Promise<PostcardDraftResponseDto> {
     const body = this.requireValidBody(input.body);
 
-    const passageContext = input.passageId
-      ? await this.passages.findSendContext(input.passageId, user.id)
-      : null;
-    if (input.passageId && !passageContext) {
-      throw AppError.resourceNotAccessible();
-    }
-
     let recipientId = input.recipientId ?? null;
-    if (passageContext) {
-      if (await this.blocks.isBlockedEitherDirection(user.id, passageContext.receiverId)) {
-        throw AppError.contactBlocked();
+    let passageId = input.passageId ?? null;
+    let replyToPostcardId: string | null = null;
+
+    if (input.replyToPostcardId) {
+      const target = await this.postcards.findById(input.replyToPostcardId);
+      if (!target) {
+        throw AppError.resourceNotAccessible();
       }
-      const resolution = resolvePassageRecipient(
-        passageContext.receiverId,
-        input.recipientId,
-      );
-      if (!resolution.ok) {
-        throw AppError.validation(['recipient:passageMismatch']);
+      const reason = await this.evaluateReply(user, target);
+      if (reason) {
+        throw this.replyError(reason);
       }
-      recipientId = resolution.recipientId;
+      if (input.passageId && input.passageId !== target.passageId) {
+        throw AppError.validation(['passageId:replyMismatch']);
+      }
+      if (input.recipientId && input.recipientId !== target.senderId) {
+        throw AppError.validation(['recipient:replyMismatch']);
+      }
+      recipientId = target.senderId;
+      passageId = target.passageId;
+      replyToPostcardId = target.id;
     } else {
-      await this.assertDraftRecipientAllowed(user, input.recipientId);
+      const passageContext = input.passageId
+        ? await this.passages.findSendContext(input.passageId, user.id)
+        : null;
+      if (input.passageId && !passageContext) {
+        throw AppError.resourceNotAccessible();
+      }
+
+      if (passageContext) {
+        if (await this.blocks.isBlockedEitherDirection(user.id, passageContext.receiverId)) {
+          throw AppError.contactBlocked();
+        }
+        const resolution = resolvePassageRecipient(
+          passageContext.receiverId,
+          input.recipientId,
+        );
+        if (!resolution.ok) {
+          throw AppError.validation(['recipient:passageMismatch']);
+        }
+        recipientId = resolution.recipientId;
+        passageId = passageContext.passageId;
+      } else {
+        await this.assertDraftRecipientAllowed(user, input.recipientId);
+      }
     }
 
     const draft = await this.drafts.create(
       user.id,
       body,
       recipientId,
-      passageContext?.passageId ?? null,
+      passageId,
+      replyToPostcardId,
     );
     const recipient = draft.recipientId
       ? (await this.accounts.findPublicByIds([draft.recipientId]))[0] ?? null
@@ -207,6 +233,14 @@ export class PostcardService {
     }
     const draft = await this.findOwnedUnsentDraft(user, id);
     const body = input.body === undefined ? undefined : this.requireValidBody(input.body);
+
+    if (
+      draft.replyToPostcardId &&
+      input.recipientId !== undefined &&
+      input.recipientId !== draft.recipientId
+    ) {
+      throw AppError.validation(['recipient:replyLocked']);
+    }
 
     let nextRecipientId = input.recipientId;
     if (input.recipientId !== undefined) {
@@ -268,7 +302,18 @@ export class PostcardService {
     let receiverId = draft.recipientId;
     let passageId: string | null = draft.passageId;
 
-    if (draft.passageId) {
+    if (draft.replyToPostcardId) {
+      const target = await this.postcards.findById(draft.replyToPostcardId);
+      if (!target) {
+        throw AppError.resourceNotAccessible();
+      }
+      const reason = await this.evaluateReply(user, target);
+      if (reason) {
+        throw this.replyError(reason);
+      }
+      receiverId = target.senderId;
+      passageId = target.passageId;
+    } else if (draft.passageId) {
       const context = await this.passages.findSendContext(draft.passageId, user.id);
       if (!context) {
         throw AppError.resourceNotAccessible();
@@ -354,6 +399,7 @@ export class PostcardService {
       body,
       receiverId,
       passageId,
+      replyToPostcardId: draft.replyToPostcardId,
       originCityId: originCity.id,
       destinationCityId: destinationCity.id,
       sentAt,
@@ -432,9 +478,13 @@ export class PostcardService {
     }
 
     const canRead = canReadPostcardBody(user.id, postcard, now);
+    const canReply =
+      role === 'RECEIVER' && (await this.evaluateReply(user, postcard)) === null;
     return {
       id: postcard.id,
       status: postcard.status,
+      passageId: postcard.passageId,
+      canReply,
       body: canRead ? postcard.body : null,
       sentAt: postcard.sentAt.toISOString(),
       deliverAt: postcard.deliverAt.toISOString(),
@@ -444,6 +494,62 @@ export class PostcardService {
       originCity: this.toCity(originCity),
       destinationCity: this.toCity(destinationCity),
     };
+  }
+
+  /**
+   * 回信资格：身份、送达、共途、封锁、共途许可与唯一性。
+   * 前三项不通过时不访问数据库，避免为非收件人额外查询。
+   */
+  private async evaluateReply(
+    user: AuthenticatedUser,
+    target: Postcard,
+  ): Promise<ReplyBlockReason | null> {
+    if (user.id === target.senderId) {
+      return 'OWN_POSTCARD';
+    }
+    if (user.id !== target.receiverId) {
+      return 'NOT_RECEIVER';
+    }
+    if (target.status !== 'DELIVERED') {
+      return 'NOT_DELIVERED';
+    }
+    if (!target.passageId) {
+      return 'NO_PASSAGE';
+    }
+    const [blocked, context, existingReply] = await Promise.all([
+      this.blocks.isBlockedEitherDirection(user.id, target.senderId),
+      this.passages.findSendContext(target.passageId, user.id),
+      this.postcards.findReplyByTarget(target.id),
+    ]);
+    return replyBlockReason({
+      viewerId: user.id,
+      senderId: target.senderId,
+      receiverId: target.receiverId,
+      status: target.status as PostcardStatusValue,
+      passageId: target.passageId,
+      blocked,
+      canSend: context?.canSend ?? false,
+      alreadyReplied: existingReply !== null,
+    });
+  }
+
+  private replyError(reason: ReplyBlockReason): AppError {
+    switch (reason) {
+      case 'NOT_RECEIVER':
+      case 'NOT_DELIVERED':
+        return AppError.resourceNotAccessible();
+      case 'OWN_POSTCARD':
+      case 'NO_PASSAGE':
+        return AppError.validation(['replyToPostcardId:notReplyable']);
+      case 'BLOCKED':
+        return AppError.contactBlocked();
+      case 'PASSAGE_CLOSED':
+        return AppError.passageStateConflict('这段共途当前不允许新的通信');
+      case 'ALREADY_REPLIED':
+        return AppError.postcardAlreadyReplied();
+      default:
+        return AppError.resourceNotAccessible();
+    }
   }
 
   private async findOwnedDraft(user: AuthenticatedUser, id: string): Promise<PostcardDraft> {
@@ -520,6 +626,7 @@ export class PostcardService {
       recipient: recipient ? { id: recipient.id, nickname: recipient.nickname } : null,
       body: draft.body,
       passageId: draft.passageId,
+      replyToPostcardId: draft.replyToPostcardId,
       updatedAt: draft.updatedAt.toISOString(),
     };
   }
