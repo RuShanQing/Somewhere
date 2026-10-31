@@ -22,6 +22,13 @@ export class PassageReader {
     return this.passages.hasCompletedBetween(userId, counterpartId);
   }
 
+  /** 纪念册只读：返回用户参与的共途 ID 与主题，不暴露参与者许可或事件。 */
+  async listParticipantContexts(
+    userId: string,
+  ): Promise<Array<{ id: string; topic: string }>> {
+    return this.passages.listContextsForUser(userId);
+  }
+
   async findSendContext(
     passageId: string,
     senderId: string,

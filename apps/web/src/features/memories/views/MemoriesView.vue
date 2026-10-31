@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref } from 'vue';
-import { api, type PersonalMemory } from '../../../shared/api/client';
+import { api, type DiarySummary, type PersonalMemory } from '../../../shared/api/client';
 import { formatDateTime } from '../../../shared/format/postcard';
 import EmptyState from '../../../shared/ui/EmptyState.vue';
 import PageHeader from '../../../shared/ui/PageHeader.vue';
 import SectionCard from '../../../shared/ui/SectionCard.vue';
 import { usePersonalMemories } from '../composables/usePersonalMemories';
-import { toFriendlyMemoryMessage } from '../messages';
+import { toFriendlyDiaryMessage, toFriendlyMemoryMessage } from '../messages';
 import {
   MEMORY_BODY_MAX,
   MEMORY_TITLE_MAX,
@@ -18,6 +18,23 @@ import {
 } from '../personal-memory';
 
 const { items, isLoading, loadError, load } = usePersonalMemories();
+
+const diaries = ref<DiarySummary[]>([]);
+const diariesLoading = ref(true);
+const diariesError = ref<string | null>(null);
+
+async function loadDiaries(): Promise<void> {
+  diariesLoading.value = true;
+  diariesError.value = null;
+  try {
+    const result = await api.diaries({ limit: 20 });
+    diaries.value = result.items;
+  } catch (error) {
+    diariesError.value = toFriendlyDiaryMessage(error);
+  } finally {
+    diariesLoading.value = false;
+  }
+}
 
 const form = reactive({ title: '', body: '' });
 const editingId = ref<string | null>(null);
@@ -106,6 +123,7 @@ async function remove(id: string): Promise<void> {
 }
 
 onMounted(() => {
+  void loadDiaries();
   void load();
 });
 </script>
@@ -115,16 +133,46 @@ onMounted(() => {
     <PageHeader
       eyebrow="纪念册"
       title="把共同的时间收好"
-      description="双城日记与共同手帐仍是诚实的暂未开放；个人记忆现在可以保存、编辑和删除，只归你个人查看。"
+      description="双城日记由双方真实交换、两封信都已抵达的内容自动形成；个人记忆只归你个人查看。"
     />
 
     <div class="section-stack">
       <SectionCard title="双城日记" description="只由双方真实交换并且已经抵达的内容形成。">
+        <p v-if="diariesLoading" class="form-status" role="status">正在读取双城日记…</p>
+
+        <div v-else-if="diariesError" class="form-alert" role="alert">
+          <p>{{ diariesError }}</p>
+          <button class="button button-quiet" type="button" @click="loadDiaries">
+            重新读取
+          </button>
+        </div>
+
         <EmptyState
+          v-else-if="diaries.length === 0"
           title="还没有双城日记"
-          description="当你们之间出现第一封已抵达的信，这里才会开始记录。"
+          description="当你们之间出现一次完整的双向交换，并且两封信都已抵达，这里才会出现第一页。"
           hint="没有内容时不会生成示例日记。"
         />
+
+        <ul v-else class="passage-grid diary-list">
+          <li v-for="diary in diaries" :key="diary.id" class="passage-card">
+            <span class="passage-topic">{{ diary.topic }}</span>
+            <p class="field-hint">
+              {{ diary.leftCity.name }} → {{ diary.rightCity.name }}
+            </p>
+            <span class="passage-hint">
+              {{ formatDateTime(diary.leftSentAt) }} / {{ formatDateTime(diary.rightSentAt) }}
+            </span>
+            <div class="penpal-actions">
+              <RouterLink
+                class="button button-quiet"
+                :to="{ name: 'diary-detail', params: { id: diary.id } }"
+              >
+                打开这一页
+              </RouterLink>
+            </div>
+          </li>
+        </ul>
       </SectionCard>
 
       <SectionCard title="共同手帐" badge="暂未开放 · P1" description="双方共同编辑的长期作品，需要额外授权。">

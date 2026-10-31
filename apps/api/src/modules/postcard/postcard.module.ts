@@ -7,6 +7,7 @@ import { ProfileModule } from '../profile/profile.module';
 import { SafetyModule } from '../safety/safety.module';
 import { PostOfficeController } from './post-office.controller';
 import { PostcardDeliveryService } from './postcard-delivery.service';
+import { PostcardReader } from './postcard-reader.service';
 import { PostcardService } from './postcard.service';
 import { PostcardsController } from './postcards.controller';
 import { DraftRepository } from './repositories/draft.repository';
@@ -18,9 +19,10 @@ import { PostcardRepository } from './repositories/postcard.repository';
   providers: [
     PostcardService,
     PostcardDeliveryService,
+    PostcardReader,
     DraftRepository,
     PostcardRepository,
   ],
-  exports: [PostcardService, PostcardDeliveryService],
+  exports: [PostcardService, PostcardDeliveryService, PostcardReader],
 })
 export class PostcardModule {}

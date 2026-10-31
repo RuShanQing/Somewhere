@@ -107,6 +107,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '纪念册', requiresAuth: true, mainNav: true },
   },
   {
+    path: '/memories/diaries/:id',
+    name: 'diary-detail',
+    component: () => import('../features/memories/views/DiaryDetailView.vue'),
+    meta: { title: '双城日记', requiresAuth: true, mainNav: true },
+  },
+  {
     path: '/settings',
     name: 'settings',
     component: () => import('../features/settings/views/SettingsView.vue'),

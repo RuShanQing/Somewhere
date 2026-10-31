@@ -211,6 +211,8 @@ model Postcard {
   replyTo         Postcard?       @relation("PostcardReply", fields: [replyToPostcardId], references: [id], onDelete: Restrict)
   replies         Postcard[]      @relation("PostcardReply")
   replyDrafts     PostcardDraft[] @relation("DraftReplyTarget")
+  diaryAsLeft     DiaryPage[]     @relation("DiaryLeft")
+  diaryAsRight    DiaryPage[]     @relation("DiaryRight")
 
   @@unique([senderId, idempotencyKey])
   @@unique([replyToPostcardId])
@@ -280,6 +282,7 @@ model Passage {
   events       PassageEvent[]
   drafts       PostcardDraft[]      @relation("DraftPassage")
   postcards    Postcard[]           @relation("PostcardPassage")
+  diaryPages   DiaryPage[]          @relation("PassageDiaryPages")
 
   @@index([progressStatus, updatedAt])
   @@map("passages")
@@ -356,4 +359,21 @@ model PenpalConsent {
   @@id([ownerId, counterpartId])
   @@index([counterpartId, consentState])
   @@map("penpal_consents")
+}
+
+/// 双城日记：一页只引用两封已送达的明信片；正文仍只存于 postcards，不复制。
+model DiaryPage {
+  id              String   @id @default(uuid()) @db.Uuid
+  passageId       String   @map("passage_id") @db.Uuid
+  postcardLeftId  String   @map("postcard_left_id") @db.Uuid
+  postcardRightId String   @map("postcard_right_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  passage       Passage  @relation("PassageDiaryPages", fields: [passageId], references: [id], onDelete: Restrict)
+  postcardLeft  Postcard @relation("DiaryLeft", fields: [postcardLeftId], references: [id], onDelete: Restrict)
+  postcardRight Postcard @relation("DiaryRight", fields: [postcardRightId], references: [id], onDelete: Restrict)
+
+  @@unique([postcardLeftId, postcardRightId])
+  @@index([passageId, createdAt(sort: Desc)])
+  @@map("diary_pages")
 }

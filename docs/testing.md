@@ -391,9 +391,9 @@ pnpm verify
 
 当前状态：**NOT RUN**。本文件只记录规划，不代表角色功能已实现或测试已通过。
 
-## 13. TASK-012 实施记录与 TASK-013 规划测试
+## 13. TASK-012 / TASK-013 实施记录
 
-> 2026-10-30 记录。TASK-012 已实现并验收；TASK-013 仍为规划，未运行。
+> 2026-10-30 记录。TASK-012 与 TASK-013 均已实现并验收。
 
 ### 13.1 TASK-012 回信
 
@@ -423,7 +423,7 @@ E2E / Smoke：
 - 红灯证据：`artifacts/verification/TASK-012/red/red-reply-unit.log`（模块不存在）、`red/red-reply-api.log`（8 条失败 / 1 条通过）。
 - 故障注入：临时让 `alreadyReplied` 恒为 false，`test:integration`、`test:e2e`、`test:smoke` FAIL、`pnpm verify` exit 1；日志 `artifacts/verification/TASK-012/red/verify-failure-proof.log`。恢复后全量门禁重新 PASS。
 
-### 13.2 TASK-013 双城日记（依赖已具备，未执行）
+### 13.2 TASK-013 双城日记
 
 单元：
 
@@ -445,6 +445,12 @@ E2E / Smoke：
 
 - 双向交换 → 双方在 `/memories` 看到同一页 → 打开双页 → 第三人 404 → 归档后仍可读 → 390px 无横向溢出。
 
+实测（2026-10-30）：后端单元 20 文件 / 130 用例（新增 1 文件 / 7 用例）；Web 单元 10 文件 / 66 用例（新增 1 条 API 客户端用例）；集成 13 文件 / 126 用例（新增 1 文件 / 6 用例）；契约 39 条路径（新增 2 条）；Playwright 24 用例（扩展现有回信用例，数量不变）；Smoke 22 项（新增 1 项）；`pnpm verify` 9/9 PASS、exit 0。
+
+- 红灯证据：`artifacts/verification/TASK-013/red/red-diary-unit.log`（`memory/domain/diary` 不存在）、`red/red-diary-contract.log`（缺少 `/memories/diaries` 路径）。
+- 故障注入：临时把列表 `limit` 固定为 50，分页用例 FAIL、`pnpm verify` exit 1；日志 `artifacts/verification/TASK-013/red/verify-failure-proof.log`。恢复后全量门禁重新 PASS。
+- 说明：先尝试的“跳过已回信”“关闭 skipDuplicates”注入被读取层/预过滤的二次校验挡住，未造成可观察失败；最终选择能被外部行为捕获的分页故障，说明测试确实从外部观察系统。
+
 ### 13.3 门禁
 
 ```text
@@ -460,4 +466,4 @@ pnpm test:smoke
 pnpm verify
 ```
 
-当前状态：TASK-012 **PASS**；TASK-013 **NOT RUN**。
+当前状态：TASK-012 **PASS**；TASK-013 **PASS**。

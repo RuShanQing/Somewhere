@@ -1,199 +1,190 @@
-# 当前开发任务 · TASK-012
+# 当前开发任务 · TASK-013
 
-状态：**DONE（TASK-012 已完成并通过门禁，等待下一任务指令）**
+状态：**DONE（TASK-013 已完成并通过门禁，等待下一任务指令）**
 
-任务名称：**PAS-02 收尾：共途回信与回信引用**
+任务名称：**MEMORY-02/03 切片：双城日记生成、列表与只读双页**
 
-任务类型：P0 邮局 / 共途闭环
+任务类型：P0 纪念册 / 私人记忆
 
 优先级：P0
 
-变更授权：本文件授权范围内；TASK-011 验收记录已归档到 `tasks/archive/TASK-011.md`。本任务只做回信，不做双城日记。
+变更授权：本文件授权范围内；TASK-012 验收记录已归档到 `tasks/archive/TASK-012.md`。
 
 ## 1. 背景与目标
 
-`specs/09-shared-passage.md` 的 PAS-02 要求“两封均已送达才完成一次双向交换”；`specs/11-memories.md` MEMORY-02.2 要求回复记录 `replyToPostcardId`，双城日记才能可靠配对且不重复生成。
+`specs/11-memories.md` 已确认双城日记的形态与生成条件：一段共途内，一封原信和它的回信都已 `DELIVERED`，形成一张只读双页；`left = 被回信的原信`，`right = 回信`；同一段共途的多次交换形成多页，不向同一页追加。
 
-当前状态（已核实）：
-
-- `postcards` 只有单向发送，没有 `reply_to_postcard_id`；
-- 没有任何回信接口或 Web 入口；
-- `GET /postcards/:id` 不返回共途信息，也不返回“是否可回信”；
-- 共途内的另一方只能新建普通草稿，无法表达“这是对哪一封信的回复”。
-
-本任务补齐 PAS-02 的另一半：
+TASK-012 已补齐 `replyToPostcardId`，但仓库中仍没有 `diary_pages`、日记生成、列表与详情。本任务只做：
 
 ```text
-收件人打开一封已送达、属于共途的信
-→ 点击「回信」
-→ 服务端从原信推导收件人与共途
-→ 按同一距离规则延迟送达
-→ 明信片保存 reply_to_postcard_id
+两封均已送达
+→ Worker 幂等生成一页 diary_pages
+→ 仅双方参与者可以读取
+→ /memories 看到页面列表（无正文）
+→ /memories/diaries/:id 只读双页（有正文）
 ```
 
-仍然不实现双城日记（TASK-013）、共途邀请、通知、举报与角色扩展。
+不实现共同手帐、公开/分享/导出、通知、举报、邀请与角色扩展。
 
 ## 2. 已确认的范围决策
 
 | 决策 | 结论 |
 |---|---|
-| 回信范围 | 只允许回复“已送达、属于某段共途、自己是收件人”的信 |
-| 原信归属 | 被回信必须已有 `passage_id`；非共途信不支持回信 |
-| 收件人 | 服务端取原信寄件人；客户端传入只做一致性校验 |
-| 共途 | 继承原信的 `passage_id`，回信不新建共途 |
-| 次数 | 一张原信最多一次回信；重复回信 409 |
-| 权限 | 停泊 / 完成 / 归档 / 封锁时不可回信 |
-| 正文 | 1–2000 码点，规则与普通明信片一致 |
-| 时间 | 沿用同一距离延迟公式与 Worker，不新增时间规则 |
-| 展示 | 详情返回 `canReply`；前端不自行推导权限 |
-| 日记 | 本任务不生成、不设计日记页面（TASK-013） |
+| 形态 | 册（共途）/ 页（一次交换）/ 左右（原信与回信） |
+| 生成条件 | `right.replyToPostcardId = left.id`、两封均 `DELIVERED`、同共途、不同作者 |
+| 生成方 | Worker 组合根在投递后调用；不提供 HTTP 创建 |
+| 幂等 | 唯一键 `(postcard_left_id, postcard_right_id)` + 跳过重复 |
+| 读取 | 仅该页两封的收发者；第三人、`ADMIN`、非法 UUID 统一 404 |
+| 受限 | 任一封变为 `RESTRICTED` 或不再是 `DELIVERED` 时，列表隐藏、详情 404 |
+| 关系变化 | 归档 / 完成 / 停泊 / 撤销信友不删除、不隐藏已形成页面 |
+| 封锁 | 不隐藏已形成页面（与已送达信件读取权一致） |
+| 列表 | 只返回元数据，不返回正文 |
+| 正文 | 只存于 `postcards`，`diary_pages` 只存引用，不复制 |
+| 删除 | 本阶段不提供删除、软删除或 `hidden_at` |
 
 ## 3. 功能范围
 
 ### 3.1 数据库
 
-新增迁移（仅新增列与索引）：
+新增迁移（仅新增表）：
 
-- `postcard_drafts.reply_to_postcard_id UUID NULL` → `postcards(id)` `ON DELETE RESTRICT`，索引；
-- `postcards.reply_to_postcard_id UUID NULL` → `postcards(id)` `ON DELETE RESTRICT`；
-- `CHECK (reply_to_postcard_id <> id)`；
-- 唯一索引 `UNIQUE (reply_to_postcard_id)`：PostgreSQL 允许任意多个 NULL，非空引用只出现一次，保证一张原信最多一封回信。
+- `diary_pages`：
+  - `id UUID PRIMARY KEY`
+  - `passage_id UUID NOT NULL` → `passages(id)` `ON DELETE RESTRICT`
+  - `postcard_left_id UUID NOT NULL` → `postcards(id)` `ON DELETE RESTRICT`
+  - `postcard_right_id UUID NOT NULL` → `postcards(id)` `ON DELETE RESTRICT`
+  - `created_at TIMESTAMPTZ NOT NULL`
+  - `CHECK (postcard_left_id <> postcard_right_id)`
+  - `UNIQUE (postcard_left_id, postcard_right_id)`
+  - `INDEX (passage_id, created_at DESC)`
 
-不新增表，不改既有列，不改任何既有行。`postcard_drafts` 不建唯一索引：草稿可以放弃后重建，最终唯一性由发送时的明信片约束决定。
+不新增 `visibility`、`is_public`、`body`、`status` 或软删除字段。
 
 ### 3.2 后端接口
 
-| Method | Path | 变化 |
+| Method | Path | 说明 |
 |---|---|---|
-| POST | `/api/v1/postcards/drafts` | 新增可选 `replyToPostcardId`；服务端推导收件人与 `passageId` |
-| PATCH | `/api/v1/postcards/drafts/:id` | 继续只接受 `body/recipientId`；`replyToPostcardId` 不可改（422） |
-| GET | `/api/v1/postcards/:id` | 新增 `passageId`、`canReply` |
-| POST | `/api/v1/postcards/drafts/:id/send` | 发送前重新校验回信资格；落库 `reply_to_postcard_id` |
+| GET | `/api/v1/memories/diaries` | 我有权阅读的页面列表；`limit` 1–50 默认 20，`offset` 默认 0；只含元数据 |
+| GET | `/api/v1/memories/diaries/:id` | 单页详情；仅参与者且两封均有效时返回正文 |
 
-优先级与错误：
+规则：
 
-- 未登录：401 `AUTH_REQUIRED`；
-- 原信不存在、查看者非参与者、原信未送达：404 `RESOURCE_NOT_ACCESSIBLE`；
-- 原信无共途、回复自己的信：422 `VALIDATION_ERROR`；
-- 已回信：409 `POSTCARD_ALREADY_REPLIED`（需要在 `ErrorCode` 中新增）；
-- 任一方封锁：403 `CONTACT_BLOCKED`；
-- 共途停泊 / 完成 / 归档：409 `PASSAGE_STATE_CONFLICT`；
-- 任一失败分支都不得创建明信片、不消耗草稿、不消耗每日额度。
+- 未登录 401 `AUTH_REQUIRED`；
+- 非参与者、页面不存在、非法 UUID、任一封受限：404 `RESOURCE_NOT_ACCESSIBLE`；
+- 列表按 `created_at DESC, id DESC`；响应不含 email、userId、ownerId、坐标；
+- 不提供 `POST/PATCH/DELETE`；
+- 生成不由 HTTP 触发。
 
-`canReply` 为 true 的条件：查看者是原信收件人、原信 `DELIVERED`、原信有 `passageId`、双方无封锁、`PassageReader` 的 `canSend` 为真、该原信尚无回信。
+### 3.3 跨模块接口
 
-创建草稿的校验顺序（在既有“已发送幂等返回”之后）：
+- `PostcardModule` 导出 `PostcardReader`：
+  - `listDiaryCandidates(limit)`：只返回 `{ replyPostcardId, targetPostcardId, passageId }`；
+  - `readDeliveredPair(viewerId, leftId, rightId)`：仅当两封均 `DELIVERED`、引用与参与者关系成立、查看者是收发者时返回窄快照（正文、时间、昵称、城市）。
+- `PassageModule` 的 `PassageReader` 增加 `listParticipantContexts(userId)`：只返回 `{ id, topic }`。
+- `MemoryModule` 单向依赖 `PostcardModule` 与 `PassageModule`；`PostcardModule` 不得反向依赖 `MemoryModule`。
 
-1. 原信存在且查看者是收件人，否则 404；
-2. 原信 `DELIVERED`，否则 404；
-3. 原信有 `passageId`，否则 422；
-4. 双方无封锁，否则 403；
-5. `findSendContext` 非空且 `canSend` 为真，否则 404 / 409；
-6. 该原信尚无回信，否则 409；
-7. 客户端传入的 `recipientId` / `passageId` 与服务端推导一致，否则 422；
-8. 写入草稿。
+### 3.4 Web
 
-发送时重复 2–6；任一失败不落库。
-
-### 3.3 Web
-
-- 明信片详情：`canReply` 为真时显示「回信」，否则不显示；
-- 写信页支持 `?replyToPostcardId=`：显示“回复某某的明信片”与共途主题，收件人只读，可返回原信；
-- 四态、390px 无横向溢出、键盘可完成回信；
-- 不显示已读回执、在线状态、回信倒计时或催促。
+- `/memories` 的“双城日记”区块：加载 / 空 / 错误 / 列表；卡片显示共途主题、城市对、两封日期；
+- 新增 `/memories/diaries/:id`：桌面左右双页、移动上下堆叠；只读正文、时间与城市；
+- 四态、390px 无横向溢出、键盘可用；
+- 不显示编辑、公开、分享、导出、评论、点赞。
 
 ## 4. 明确不做
 
-- 双城日记的生成、列表、详情（TASK-013）；
-- 共途邀请 / 创建 / 拒绝 / 过期；
-- 对非共途信的回复；对同一原信的再次回复；
-- 撤回已寄出的信、编辑已发送的回信正文；
-- 通知、举报、`RESTRICTED` 写入口、角色扩展、后台管理；
-- 修改认证、会话、密码、Origin、限流与日志脱敏规则。
+- 共同手帐、条目版本、媒体上传（P1）；
+- 日记删除、软删除、公开、分享、导出、搜索他人日记；
+- 手动创建、追加、合并、编辑页面；
+- `source_type/source_id`、引用个人记忆；
+- 通知、举报、`RESTRICTED` 写入口、角色扩展；
+- 共途邀请/创建、地图渲染；
+- 修改认证、会话、密码、邮局发送与回信规则。
 
 ## 5. 工作拆分
 
-- [x] `T12-01` 本文档、`specs/05`、`specs/09`、`docs/architecture.md`、`docs/testing.md` 口径。
-- [x] `T12-02` RED：单元资格矩阵、集成 9 条、契约字段、E2E、Smoke，并保存失败证据。
-- [x] `T12-03` 迁移：两个可空列、自引用外键、检查约束、唯一索引。
-- [x] `T12-04` 后端：`domain/reply.ts`、仓储查询、`PostcardService` 校验、DTO、`ErrorCode` 扩展。
-- [x] `T12-05` 重新生成 OpenAPI 客户端并更新契约检查。
-- [x] `T12-06` Web：详情回信入口与写信页回信模式。
-- [x] `T12-07` E2E、Smoke、全量 `pnpm verify`、失败证明与证据归档。
+- [x] `T13-01` 任务卡、`specs/11`、`specs/00-index.md`、`docs/architecture.md`、`docs/testing.md` 口径。
+- [x] `T13-02` RED：配对纯函数、生成幂等、列表/详情权限、契约、E2E、Smoke。
+- [x] `T13-03` 迁移：`diary_pages`、外键、检查、唯一键、索引；清库顺序。
+- [x] `T13-04` `PostcardReader`、`PassageReader.listParticipantContexts`、`MemoryRepository`、`MemoryService`、`DiariesController`。
+- [x] `T13-05` Worker 与 `run-delivery-once` 接入生成。
+- [x] `T13-06` 重新生成 OpenAPI 客户端并更新契约检查。
+- [x] `T13-07` Web：`/memories` 列表与 `/memories/diaries/:id`。
+- [x] `T13-08` E2E、Smoke、全量 `pnpm verify`、失败证明与证据归档。
 
 ## 6. 验收条件
 
-### AC-01 · 回信草稿
+### AC-01 · 生成
 
-Given 已送达共途信 X 的收件人 B；When `POST /postcards/drafts { body, replyToPostcardId: X }`；Then 201，草稿的 `recipientId = X.senderId`、`passageId = X.passageId`、`replyToPostcardId = X`；客户端传入不一致的 `recipientId` 或 `passageId` 时 422。
+Given 同一共途内 A 的原信与 B 的回信都已 `DELIVERED`；When Worker 运行；Then 恰好生成一页，`left` 是原信、`right` 是回信；只有一封送达时不生成；Worker 重试或并发扫描不重复。
 
-### AC-02 · 资格边界
+### AC-02 · 列表
 
-Given 原信在途 / 查看者非参与者 / 原信无共途 / 回复自己的信 / 已回信 / 停泊 / 封锁；Then 分别返回 404 / 404 / 422 / 422 / 409 / 409 / 403，且不创建草稿、不消耗每日额度。
+Given 参与者 A；When `GET /memories/diaries`；Then 只返回 A 参与的页面，字段只含主题、城市对、两封日期与 `createdAt`，不含正文、email、userId、坐标；第三人列表为空。
 
-### AC-03 · 发送与落库
+### AC-03 · 详情
 
-Given 合法回信草稿；When 发送；Then 明信片 `status=IN_TRANSIT`、`reply_to_postcard_id` 落库、`deliverAt` 由双方城市距离计算；收件人在送达前读不到正文。
+Given 参与者 A；When `GET /memories/diaries/:id`；Then 返回左右两封正文与时间；B 同样可读；第三人、`ADMIN`、非法 UUID 404。
 
-### AC-04 · 唯一与并发
+### AC-04 · 受限与关系变化
 
-Given 同一原信的两个回信草稿并发发送；Then 只有一封成功，另一封 409 `POSTCARD_ALREADY_REPLIED`；数据库只有一行带该 `reply_to_postcard_id`。
+Given 任一封变为 `RESTRICTED`；Then 列表隐藏、详情 404；When 共途归档 / 完成 / 停泊或信友撤销；Then 页面仍可读。
 
-### AC-05 · 接口与隐私
+### AC-05 · 数据库
 
-Given `GET /postcards/:id`；Then 收件人看到的已送达共途信 `canReply=true`，寄件人看到 `false`；响应不含 email、坐标、`receptionMode` 或对方角色。
+只有一次新增迁移；唯一键、外键、自指检查与索引存在；空库可重放；同一对卡片不能重复；`postcard_left_id = postcard_right_id` 被拒绝。
 
 ### AC-06 · Web
 
-Given 收件人打开已送达共途信；When 点击回信、填写正文、发送；Then 页面与数据库一致；停泊后入口消失；390px 无横向溢出；键盘可完成。
+Given 双方完成一次交换；When 进入 `/memories` 并打开详情；Then 显示同一页的双份正文与城市；空态/错误态/加载态可用；390px 无横向溢出；键盘可打开与返回；不显示公开/分享入口。
 
-### AC-07 · 数据库与回归
+### AC-07 · 回归与门禁
 
-只有一次新增迁移；空库 `migrate deploy` 可重放；外键、检查约束、唯一索引存在；TASK-001～011 全部测试保持通过；`pnpm lint`、`typecheck`、`build`、`test:unit`、`test:integration`、`test:contract`、`test:architecture`、`test:e2e`、`test:smoke`、`pnpm verify` 实际运行并 exit 0；故障注入后返回非 0 并恢复。
+TASK-001～012 全部测试保持通过；`pnpm lint`、`typecheck`、`build`、`test:unit`、`test:integration`、`test:contract`、`test:architecture`、`test:e2e`、`test:smoke`、`pnpm verify` 实际运行并 exit 0；故障注入后返回非 0 并恢复。
 
 ## 7. 开发步骤
 
 1. 文档口径与本任务卡。
-2. RED：领域资格矩阵、`postcard-reply` 集成、契约、E2E、Smoke。
-3. 迁移与 Prisma Client。
-4. 后端回信校验、DTO 与错误码。
-5. 生成 OpenAPI 客户端与契约检查。
-6. Web 回信入口与写信页。
-7. E2E、Smoke、全量回归、失败证明与证据归档。
+2. RED：配对纯函数、`memories-diaries` 集成、契约、E2E、Smoke。
+3. 迁移与 Prisma Client；更新清库顺序。
+4. 跨模块读取接口与 Memory 子域。
+5. Worker 生成接入。
+6. OpenAPI 与契约。
+7. Web 页面。
+8. E2E、Smoke、全量回归、失败证明与证据归档。
 
-## 8. 执行记录（实测）
+## 8. 执行记录（待填写）
 
 | 字段 | 当前值 |
 |---|---|
 | 开始时间 | 2026-10-30（UTC+8） |
 | 环境 | macOS；Node v24.20.0；pnpm 12.15.0；PostgreSQL 17.11；Playwright 1.64.1 + 本机 Chrome |
-| 代码变更 | `schema.prisma` 与迁移 `20261030120000_add_postcard_reply`；`postcard/domain/reply.ts`；`PostcardService` 回信校验与 `canReply`；`PostcardRepository` / `DraftRepository`；DTO；`ErrorCode.POSTCARD_ALREADY_REPLIED`；Web 详情回信入口与写信页回信模式；契约检查；E2E 与 Smoke |
-| 新增 / 更新测试 | 后端单元 19 文件 / 123 用例（新增 1 文件 / 8 用例）；Web 单元 10 文件 / 65 用例（新增 1 条）；集成 12 文件 / 120 用例（新增 1 文件 / 9 用例）；契约 37 条路径（字段新增，路径数不变）；Playwright 24 用例（新增 1 条）；Smoke 21 项（新增 1 项） |
+| 代码变更 | `schema.prisma` 与迁移 `20261030130000_add_diary_pages`；`postcard/postcard-reader.service.ts`；`PassageReader.listParticipantContexts`；`memory/domain/diary.ts`、`diary` DTO、`DiariesController`；`MemoryRepository` / `MemoryService` 日记方法；Worker 与 `run-delivery-once` 生成接入；Web `/memories` 列表、`DiaryDetailView`、路由；契约、E2E、Smoke；清库顺序 |
+| 新增 / 更新测试 | 后端单元 20 文件 / 130 用例（新增 1 文件 / 7 用例）；Web 单元 10 文件 / 66 用例（新增 1 条）；集成 13 文件 / 126 用例（新增 1 文件 / 6 用例）；契约 39 条路径（新增 2 条）；Playwright 24 用例（扩展现有回信用例）；Smoke 22 项（新增 1 项） |
 | 实际运行命令 | `pnpm lint`、`pnpm typecheck`、`pnpm build`、`pnpm test:unit`、`pnpm test:integration`、`pnpm test:contract`、`pnpm test:architecture`、`pnpm test:e2e`、`pnpm test:smoke`、`pnpm verify`；故障注入后再次 `pnpm verify` |
-| 通过项 | 全部命令 exit 0；`pnpm verify` 9/9 PASS；证据 `artifacts/verification/TASK-012/final-verify.log`、`artifacts/verification/TASK-012/verify/2026-10-30T10-07-50-445Z` |
-| 未通过 / 阻塞 | 首轮集成 2 条失败：回复自己的信期望 422、实现返回 404；封锁接口实际返回 200、测试期望 201。前者新增 `OWN_POSTCARD` 原因并映射 422，后者修正测试期望；复跑通过。无遗留阻塞 |
+| 通过项 | 全部命令 exit 0；`pnpm verify` 9/9 PASS；证据 `artifacts/verification/TASK-013/final-verify.log`、`artifacts/verification/TASK-013/verify/2026-10-30T10-58-57-335Z` |
+| 未通过 / 阻塞 | 首次架构检查 2 处跨模块导入：记忆领域直接引用邮局状态类型、Memory 深层导入 PostcardReader。已改为本地状态联合类型并把 `postcard-reader.service` 加入公开入口白名单，复跑通过。无遗留阻塞 |
 | 验收结论 | **DONE · PASS** |
 
 ### 8.1 验收证据（实测）
 
 | 验收项 | 证据 | 结果 |
 |---|---|---|
-| AC-01 回信草稿 | 集成：收件人、`passageId`、`replyToPostcardId` 由服务端解析；客户端传第三人或另一共途 422；响应无 email/坐标 | PASS |
-| AC-02 资格边界 | 集成：在途/非参与者 404，自己的信/非共途 422，重复回信 409，停泊 409，封锁 403，均不落库 | PASS |
-| AC-03 发送与落库 | 集成：`reply_to_postcard_id` 落库，同城 720 分钟，送达前收件人 404，草稿已消费 | PASS |
-| AC-04 唯一与并发 | 集成：同一原信并发两封只成功一封（201/409），数据库只有 1 行回信 | PASS |
-| AC-05 接口与隐私 | 集成：`canReply` 随送达、停泊/续程、已回信变化；`PATCH` 改绑 422；响应无 email/坐标/接信状态 | PASS |
-| AC-06 Web | E2E：A 寄出 → 推进送达 → B 回信 → 推进送达 → A 阅读；390px 无横向溢出；停泊后入口消失（集成） | PASS |
-| AC-07 数据库与回归 | `prepare-test-db` 显示 12 次迁移；测试库可重放；`pnpm verify` 9/9 PASS；故障注入后 exit 1 | PASS |
+| AC-01 生成 | 集成：只有一封送达不生成；两封送达恰好一页；重复调用不重复；`left/right/passage` 正确 | PASS |
+| AC-02 列表 | 集成：A/B 各 1 页；第三人、`ADMIN` 为空；字段白名单无正文、email、userId、坐标；分页与多页 | PASS |
+| AC-03 详情 | 集成：A/B 返回两份正文；第三人、`ADMIN`、随机 UUID、非法 UUID 全部 404；未登录 401 | PASS |
+| AC-04 受限与关系 | 集成：停泊、完成、归档后仍可读；任一封 `RESTRICTED` 后列表隐藏、详情 404 | PASS |
+| AC-05 数据库 | 第 13 次迁移；唯一键、外键、自指检查与索引；自指与重复页面被数据库拒绝 | PASS |
+| AC-06 Web | E2E：回信送达后 `/memories` 出现日记；列表不含正文；详情展示双份正文；390px 无横向溢出；无分享/导出入口 | PASS |
+| AC-07 回归与门禁 | 单元 130、Web 66、集成 126、契约 39、E2E 24、Smoke 22 全部通过；`pnpm verify` 9/9 PASS；故障注入 exit 1 | PASS |
 
 补充说明：
 
-- RED：单元因 `postcard/domain/reply` 不存在失败（`artifacts/verification/TASK-012/red/red-reply-unit.log`）；集成 8 条失败、1 条因字段白名单 422 误通过（`red/red-reply-api.log`）。
-- 失败证明：临时让 `alreadyReplied` 恒为 false，`test:integration`、`test:e2e`、`test:smoke` FAIL、`pnpm verify` exit 1；日志 `artifacts/verification/TASK-012/red/verify-failure-proof.log`。恢复后重新运行全量门禁，9/9 PASS。
-- 契约：`CreatePostcardDraftDto.replyToPostcardId`、`PostcardDraftResponseDto.replyToPostcardId`、`PostcardDetailDto.passageId/canReply`；显式断言不含 email、坐标、`receptionMode` 或角色。
-- 测试基础设施：集成清库沿用既有顺序；本次未新增表，`reset-test-db.mjs` 无需改动。
-- 仍未实现：双城日记（TASK-013）、共途邀请/创建、通知、举报、`RESTRICTED` 写入口、角色扩展。
+- RED：单元因 `memory/domain/diary` 不存在失败（`artifacts/verification/TASK-013/red/red-diary-unit.log`）；契约因缺少 `/memories/diaries` 路径失败（`red/red-diary-contract.log`）。
+- 失败证明：前两次注入（读取层放宽、关闭 `skipDuplicates`）被二次校验与预过滤挡住，未产生可观察失败；最终把列表 `limit` 固定为 50，分页用例 FAIL、`pnpm verify` exit 1（`red/verify-failure-proof.log`）。恢复后重新运行全量门禁，9/9 PASS。
+- 契约：新增 `DiarySummaryDto`、`DiaryPostcardDto`、`DiaryDetailDto`、`DiaryListDto`；显式断言列表无正文，详情无 email、用户 ID、坐标、密码或会话字段。
+- 测试基础设施：集成清库与 `reset-test-db.mjs` 把 `diary_pages` 放在 `postcards` / `passages` 之前；E2E 复用 `test-advance-postcard.mjs`，由 `run-delivery-once` 同步生成日记。
+- 仍未实现：共同手帐、日记删除、公开/分享/导出、通知、举报、`RESTRICTED` 写入口、角色扩展、共途邀请。
 
 ## 9. 下一步
 
-完成 TASK-012 后，再评估 TASK-013 双城日记（MEMORY-02/03）。不自动进入下一任务。
+完成 TASK-013 后，再评估共途邀请/创建（PAS-01）或其他 P0 缺口。不自动进入下一任务。

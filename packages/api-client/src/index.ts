@@ -53,6 +53,11 @@ export type PersonalMemory = components['schemas']['PersonalMemoryDto'];
 export type PersonalMemoryList = components['schemas']['PersonalMemoryListDto'];
 export type CreatePersonalMemoryInput = components['schemas']['CreatePersonalMemoryDto'];
 export type UpdatePersonalMemoryInput = components['schemas']['UpdatePersonalMemoryDto'];
+export type DiaryCity = components['schemas']['DiaryCityDto'];
+export type DiarySummary = components['schemas']['DiarySummaryDto'];
+export type DiaryList = components['schemas']['DiaryListDto'];
+export type DiaryPostcard = components['schemas']['DiaryPostcardDto'];
+export type DiaryDetail = components['schemas']['DiaryDetailDto'];
 
 export interface PostcardListParams {
   limit?: number;
@@ -157,6 +162,8 @@ export interface ApiClient {
     input: UpdatePersonalMemoryInput,
   ): Promise<PersonalMemory>;
   deletePersonalMemory(id: string): Promise<void>;
+  diaries(query?: { limit?: number; offset?: number }): Promise<DiaryList>;
+  diary(id: string): Promise<DiaryDetail>;
 }
 
 interface RequestOptions {
@@ -351,6 +358,9 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       request<void>(`/api/v1/memories/personal/${encodeURIComponent(id)}`, {
         method: 'DELETE',
       }),
+    diaries: (query) => request<DiaryList>(withQuery('/api/v1/memories/diaries', query)),
+    diary: (id) =>
+      request<DiaryDetail>(`/api/v1/memories/diaries/${encodeURIComponent(id)}`),
   };
 }
 

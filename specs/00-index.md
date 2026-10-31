@@ -18,14 +18,14 @@
 | [08-goodwill-relay.md](08-goodwill-relay.md) | 未开始（P1） | 无 | 接力匹配、匿名、终止 |
 | [09-shared-passage.md](09-shared-passage.md) | TASK-012 回信完成 | 列表/详情、停泊/续程/完成/归档、`canSend`、非生产 seed、并发与幂等、邮局 `passage_id` 接入、共途内回信闭环 | 邀请、信友联动、纪念册 |
 | [10-penpals.md](10-penpals.md) | TASK-010 完成 | 双方同意、撤销/拒绝、三组列表、封锁优先、邮局收件人接入 | 信友发起新共途、信友专属暂停、通知、纪念册 |
-| [11-memories.md](11-memories.md) | TASK-011 个人记忆完成；双城日记 TASK-013 规划 | 个人记忆手工 CRUD、仅本人可见、列表/创建/编辑/删除 | 双城日记（TASK-013 规划，回信引用已具备）、共同手帐、来源引用、公开/分享/导出 |
+| [11-memories.md](11-memories.md) | TASK-013 完成 | 个人记忆 CRUD、双城日记 `diary_pages` 幂等生成、列表（无正文）与只读双页（双方可读、第三人 404） | 共同手帐、来源引用、公开/分享/导出、日记删除 |
 | [12-safety-and-moderation.md](12-safety-and-moderation.md) | TASK-010 封锁覆盖信友 | 通用 Origin/限流/错误基线、`ADMIN` 故事审核与审计、`user_blocks`、封锁列表/创建/解除、邮局/共途/信友拦截 | 举报、通用安全处置、`RESTRICT`、封锁后隐藏历史 |
 | [13-notifications.md](13-notifications.md) | 未开始 | 无 | 送达通知、通知偏好 |
 | [14-story-deferred-scope.md](14-story-deferred-scope.md) | 范围决策 | TASK-005 已按边界实现 | 显示城市/上地图/共途邀请开关、匿名作者、30 天轮换等 |
 | [15-roles-and-permissions.md](15-roles-and-permissions.md) | 规划（未实现） | 当前仍为 `USER/ADMIN`；`GUEST` 仅表示未登录 | `MODERATOR` 最小切片、`ADMIN` 用户/角色管理、`CURATOR` 与精选专题 |
 
-**最近任务**：TASK-001 基础工程与认证；TASK-002 AUTH 收敛；TASK-003 城市与最小资料；TASK-004 邮局与距离延迟投递；TASK-005 城市故事站与最小审核闭环；TASK-006 世界记忆地图业务入口；TASK-007 共途状态与参与者许可；TASK-008 共途通信许可接入邮局；TASK-009 最小封锁；TASK-010 双向信友与邮局接入；TASK-011 个人记忆（DONE）；TASK-012 共途回信（DONE）。
-**下一任务**：TASK-013 双城日记（MEMORY-02/03，待批准）。TASK-012 已补齐回信引用；日记的“册 / 页 / 左右”形态与“两封均已送达才生成”的口径已确认。共途邀请/创建（PAS-01）延后为独立任务，仍不展开其专项测试，也不进入二维/三维地图渲染。
+**最近任务**：TASK-001 基础工程与认证；TASK-002 AUTH 收敛；TASK-003 城市与最小资料；TASK-004 邮局与距离延迟投递；TASK-005 城市故事站与最小审核闭环；TASK-006 世界记忆地图业务入口；TASK-007 共途状态与参与者许可；TASK-008 共途通信许可接入邮局；TASK-009 最小封锁；TASK-010 双向信友与邮局接入；TASK-011 个人记忆（DONE）；TASK-012 共途回信（DONE）；TASK-013 双城日记（DONE）。
+**下一任务**：共途邀请/创建（PAS-01）或其他 P0 缺口，待批准。双城日记已按“册 / 页 / 左右”实现并验收；仍不展开邀请专项测试，也不进入二维/三维地图渲染。
 **角色规划**：四角色设计已记录在 [15-roles-and-permissions.md](15-roles-and-permissions.md)，但不改变上述顺序；`MODERATOR`、`ADMIN` 角色管理、`CURATOR` 均需另立任务，当前不得实现。`ADMIN` 不允许查看其他用户的邮箱，也不允许读取私人信件或私人记忆。
 
 ## 1. 四个主导航与规格映射

@@ -5,6 +5,7 @@ import { AppModule } from '../app.module';
 import { JsonLogger } from '../common/logging/json-logger';
 import { sanitizeForLog } from '../common/logging/sanitize';
 import { APP_CONFIG, type AppConfig } from '../config/app-config';
+import { MemoryService } from '../modules/memory/memory.service';
 import { PostcardDeliveryService } from '../modules/postcard/postcard-delivery.service';
 
 async function bootstrap(): Promise<void> {
@@ -12,6 +13,7 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.createApplicationContext(AppModule, { logger: false });
   const config = app.get<AppConfig>(APP_CONFIG);
   const delivery = app.get(PostcardDeliveryService);
+  const memories = app.get(MemoryService);
 
   let running = false;
 
@@ -24,6 +26,17 @@ async function bootstrap(): Promise<void> {
       const delivered = await delivery.deliverDue();
       if (delivered > 0) {
         logger.record({ level: 'info', msg: 'postcards_delivered', count: delivered });
+      }
+      try {
+        // 日记生成失败不回滚已完成的投递；下一轮扫描会按唯一键补生成。
+        const diaries = await memories.generateDueDiaries();
+        if (diaries > 0) {
+          logger.record({ level: 'info', msg: 'diary_pages_created', count: diaries });
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error ? sanitizeForLog(error.message) : 'unknown error';
+        logger.record({ level: 'error', msg: 'diary_generation_failed', detail: message });
       }
     } catch (error) {
       const message = error instanceof Error ? sanitizeForLog(error.message) : 'unknown error';

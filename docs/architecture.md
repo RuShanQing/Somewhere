@@ -1,6 +1,6 @@
 # Somewhere · 工程架构（目标架构）
 
-状态：**目标架构 + TASK-001～TASK-011 已落地的最小切片 + TASK-012 已确认范围**。`apps/web`、`apps/api`、`packages/api-client`、`users`/`sessions`/`cities`/`profiles`/`postcard_drafts`/`postcards`/`stories`/`story_review_actions`/`passages`/`passage_participants`/`passage_events`/`user_blocks`/`penpal_consents`/`personal_memories`、认证 API、城市目录、最小资料、邮局三栏、明信片草稿/发送/Worker 投递、城市故事草稿/提交/管理员审核/公开故事站、世界记忆地图业务入口、共途状态与邮局通信许可接入、最小封锁、双向信友与个人记忆已完成；共途邀请/创建、双城日记、共同手帐、通知、举报、完整安全处置与角色扩展仍是设计，仓库中不存在对应业务实现。TASK-012（共途回信）已实现并验收；TASK-013（双城日记）已确认范围与依赖方向，但**尚未编码、未新增表**。技术栈以本科毕设、Web 优先、单人可持续维护为原则。本文是架构约束，不是地图视觉实现说明。
+状态：**目标架构 + TASK-001～TASK-011 已落地的最小切片 + TASK-012 已确认范围**。`apps/web`、`apps/api`、`packages/api-client`、`users`/`sessions`/`cities`/`profiles`/`postcard_drafts`/`postcards`/`stories`/`story_review_actions`/`passages`/`passage_participants`/`passage_events`/`user_blocks`/`penpal_consents`/`personal_memories`/`diary_pages`、认证 API、城市目录、最小资料、邮局三栏、明信片草稿/发送/Worker 投递、城市故事草稿/提交/管理员审核/公开故事站、世界记忆地图业务入口、共途状态与邮局通信许可接入、最小封锁、双向信友与个人记忆已完成；共途邀请/创建、双城日记、共同手帐、通知、举报、完整安全处置与角色扩展仍是设计，仓库中不存在对应业务实现。TASK-012（共途回信）与 TASK-013（双城日记）均已实现并验收。技术栈以本科毕设、Web 优先、单人可持续维护为原则。本文是架构约束，不是地图视觉实现说明。
 
 ## 1. 架构目标与优先级
 
@@ -68,13 +68,13 @@ somewhere/
 |---|---|---|
 | AuthModule | 注册、登录、会话、身份和角色 | `SessionGuard`, `SessionService`, `AccountService`；规划中的 `RoleService` 负责角色变更与审计 |
 | ProfileModule | 昵称、城市、接信状态 | `CityService`, `ProfileReader` |
-| PostcardModule | 草稿、发送、在途、收信、投递状态；TASK-012 已实现回信引用 | `PostcardService`, `PostcardDeliveryService`；规划 `PostcardReader`（只读窄接口，供 TASK-013 的 MemoryModule 读取已送达内容，不暴露正文给非参与者） |
+| PostcardModule | 草稿、发送、在途、收信、投递状态；回信引用 | `PostcardService`, `PostcardDeliveryService`, `PostcardReader`（只读窄接口，供 MemoryModule 读取已送达内容，不暴露正文给非参与者） |
 | DeliveryModule | 距离与延迟纯策略 | `DeliveryPolicy` |
 | StoryModule | 城市故事及审核状态 | `ApprovedStoryReader` |
 | DiscoveryModule | 发现入口、主题筛选、世界记忆地图城市聚合 | 组合 `ApprovedStoryReader` + `CityService`；只读；不复制故事表、不新增可见性条件 |
 | PassageModule | 共途经历状态、参与者、停泊 / 续程 | `PassagePolicy`, `PassageReader` |
 | PenpalModule | 双向信友授权 | `PenpalPolicy`, `PenpalReader` |
-| MemoryModule | 个人记忆 CRUD（已实现）；双城日记（TASK-013 规划）；共同手帐 P1 | 当前无跨模块导出；规划 `MemoryReader`, `MemoryPolicy`；TASK-013 单向依赖 `PostcardModule.PostcardReader` |
+| MemoryModule | 个人记忆 CRUD；双城日记生成 / 读取（已实现）；共同手帐 P1 | 导出 `MemoryService`（Worker 生成用）；单向依赖 `PostcardModule.PostcardReader` 与 `PassageModule.PassageReader`；`MemoryReader` / `MemoryPolicy` 仍规划 |
 | RelayModule | 善意接力（P1） | 接力匿名聚合查询 |
 | SafetyModule | 封锁与安全基线（举报、通用处置仍规划） | `BlockPolicy`；举报/审核处置为规划 |
 | NotificationModule | 送达通知、通知偏好 | `NotificationPublisher` |
@@ -167,7 +167,7 @@ Worker 停机、重启或重复扫描不能丢信或提前送达；数据库是�
 - `GET /discovery/cities?topic=`（世界记忆地图城市聚合；匿名可读，只读）
 - `GET /moderation/queue`、`POST /moderation/stories/:id/decision`（仅 `ADMIN`）
 - `GET /passages?status=`、`GET /passages/:id`、`POST /passages/:id/pause|resume|complete|archive`（无创建 / 邀请端点）
-- `GET /memories/diaries`、`GET /memories/diaries/:id`（TASK-013 规划）、`GET/POST /memories/personal`、`PATCH/DELETE /memories/personal/:id`
+- `GET /memories/diaries`、`GET /memories/diaries/:id`、`GET/POST /memories/personal`、`PATCH/DELETE /memories/personal/:id`
 - `POST /safety/reports`、`POST /safety/blocks`
 
 成功返回约定 DTO；错误统一 JSON：
@@ -391,14 +391,14 @@ TASK-004 未实现回信、`passage_id`、`reply_to_postcard_id`、模板/多媒
 - Web：详情页在 `canReply` 为真时显示「回信」，跳转 `/post-office/compose?replyToPostcardId=`；写信页从原信恢复收件人与共途，收件人只读。
 - 本轮未实现：链式回信的专门展示、通知、举报、角色扩展；共途邀请/创建仍不提供 `POST /passages`。
 
-### 13.15 TASK-013 双城日记规划（未实现）
+### 13.15 TASK-013 双城日记实现（2026-10-30）
 
-> 2026-10-30 确认范围。以下能力尚未编码，不得当作已实现。
-
-- 数据表：`diary_pages(passage_id, postcard_left_id, postcard_right_id, created_at)`；`left` 为被回信的原信，`right` 为回信；每次完整交换一张只读双页，不向同一页追加。
-- 跨模块方向：`MemoryModule → PostcardModule.PostcardReader`（只读窄接口），`PostcardModule` **不得**反向依赖 `MemoryModule`。`PostcardReader` 只返回两封均已 `DELIVERED` 且查看者是参与者的窄数据；正文不进入 `diary_pages`。
-- 生成时机：Worker 组合根在 `PostcardDeliveryService.deliverDue()` 之后调用 `MemoryService.generateDueDiaries()`；投递失败与日记生成失败互不回滚，靠唯一键与下一轮扫描补生成。
-- 尚未实现：日记删除、公开/分享/导出、通知、举报与角色扩展。
+- 数据表：`diary_pages(id, passage_id, postcard_left_id, postcard_right_id, created_at)`，外键 `ON DELETE RESTRICT`、自指检查、`(left,right)` 唯一键、`(passage_id, created_at DESC)` 索引；迁移 `20261030130000_add_diary_pages` 只新增表。正文仍只存于 `postcards`，本表只保存引用。
+- 跨模块：`PostcardModule` 导出 `PostcardReader`（`listDiaryCandidates`、`readDeliveredPair`），`PassageModule.PassageReader` 增加 `listParticipantContexts`；`MemoryModule` 单向依赖两者，`PostcardModule` 不反向依赖。
+- 生成：Worker 组合根在 `deliverDue()` 后调用 `MemoryService.generateDueDiaries()`；`run-delivery-once` 同步生成；配对规则由 `memory/domain/diary.ts` 判定；唯一键 + `skipDuplicates` 保证重试与并发不重复；生成失败不回滚已完成的投递。
+- 读取：`GET /memories/diaries` 只返回元数据（主题、城市对、两封日期），`GET /memories/diaries/:id` 返回双页正文；只允许该页两封的收发者，第三人 / `ADMIN` / 非法 ID / 受限页面统一 404；列表读取时再次校验两封状态。
+- Web：`/memories` 双城日记列表、`/memories/diaries/:id` 只读双页；共同手帐仍为诚实空态。
+- 仍未实现：共同手帐、日记删除、公开/分享/导出、通知、举报与角色扩展。
 
 ## 14. 角色与权限规划（未实现）
 

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { PersonalMemory } from '@prisma/client';
+import type { DiaryPage, PersonalMemory } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 
 /**
@@ -48,5 +48,54 @@ export class MemoryRepository {
       where: { id, ownerId },
     });
     return result.count > 0;
+  }
+
+  async listDiaryPagesByPassageIds(
+    passageIds: string[],
+    limit: number,
+    offset: number,
+  ): Promise<DiaryPage[]> {
+    if (passageIds.length === 0) {
+      return [];
+    }
+    return this.prisma.diaryPage.findMany({
+      where: { passageId: { in: passageIds } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      skip: offset,
+      take: limit,
+    });
+  }
+
+  async findDiaryPageById(id: string): Promise<DiaryPage | null> {
+    return this.prisma.diaryPage.findUnique({ where: { id } });
+  }
+
+  /** 已经成页的回信 ID；用于生成前跳过重复候选。 */
+  async listDiaryPageReplyIds(replyIds: string[]): Promise<Set<string>> {
+    if (replyIds.length === 0) {
+      return new Set();
+    }
+    const rows = await this.prisma.diaryPage.findMany({
+      where: { postcardRightId: { in: replyIds } },
+      select: { postcardRightId: true },
+    });
+    return new Set(rows.map((row) => row.postcardRightId));
+  }
+
+  async createDiaryPages(
+    rows: Array<{ passageId: string; leftId: string; rightId: string }>,
+  ): Promise<number> {
+    if (rows.length === 0) {
+      return 0;
+    }
+    const result = await this.prisma.diaryPage.createMany({
+      data: rows.map((row) => ({
+        passageId: row.passageId,
+        postcardLeftId: row.leftId,
+        postcardRightId: row.rightId,
+      })),
+      skipDuplicates: true,
+    });
+    return result.count;
   }
 }

@@ -23,6 +23,7 @@ const PUBLIC_MODULE_API = [
   /\/block-policy\.service$/,
   /\/penpal-policy\.service$/,
   /\/penpal-reader\.service$/,
+  /\/postcard-reader\.service$/,
 ];
 
 function walk(dir, files = []) {

@@ -49,7 +49,7 @@ export async function resetDatabase(app: INestApplication): Promise<void> {
   const prisma = app.get(PrismaService);
   // cities 是静态目录，跨测试保留；只清空用户、故事、邮局、共途与信友相关数据
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "personal_memories", "penpal_consents", "user_blocks", "passage_events", "passage_participants", "passages", "story_review_actions", "stories", "postcard_drafts", "postcards", "profiles", "sessions", "users" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "diary_pages", "personal_memories", "penpal_consents", "user_blocks", "passage_events", "passage_participants", "passages", "story_review_actions", "stories", "postcard_drafts", "postcards", "profiles", "sessions", "users" RESTART IDENTITY CASCADE',
   );
 }
 

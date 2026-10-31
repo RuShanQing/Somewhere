@@ -247,4 +247,15 @@ describe('API 客户端', () => {
       JSON.stringify({ body: '回信正文', replyToPostcardId: 'postcard-1' }),
     );
   });
+
+  it('双城日记列表携带分页参数，详情路径编码 id', async () => {
+    const { client, captured } = buildClient(200, { items: [] });
+
+    await client.diaries({ limit: 5, offset: 10 });
+    await client.diary('diary/1');
+
+    expect(captured[0]?.url).toBe('/api/v1/memories/diaries?limit=5&offset=10');
+    expect(captured[0]?.init.method).toBe('GET');
+    expect(captured[1]?.url).toBe('/api/v1/memories/diaries/diary%2F1');
+  });
 });

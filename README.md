@@ -2,7 +2,7 @@
 
 Somewhere 是一个 Web 优先的慢社交产品：用按距离延迟抵达的明信片、城市故事、善意接力与「共途」，和远方的人交换生活片段。
 
-当前仓库完成 **TASK-001～TASK-012**：可运行的基础工程、账号注册/登录/会话/退出（含单活动会话）、49 条城市目录、最小个人资料与 `/settings`、邮局三栏与距离延迟投递、城市故事草稿/提交/管理员审核/公开故事站、世界记忆地图的业务入口（城市聚合与单城市故事页）、共途的列表/详情与停泊/续程/完成/归档、共途通信许可接入邮局、共途内的回信与引用、最小封锁、双向信友授权，以及只归本人可见的个人记忆。共途邀请、双城日记、共同手帐、通知、举报与完整安全处置、角色扩展等功能尚未实现；地图仍不包含任何渲染技术。
+当前仓库完成 **TASK-001～TASK-013**：可运行的基础工程、账号注册/登录/会话/退出（含单活动会话）、49 条城市目录、最小个人资料与 `/settings`、邮局三栏与距离延迟投递、城市故事草稿/提交/管理员审核/公开故事站、世界记忆地图的业务入口（城市聚合与单城市故事页）、共途的列表/详情与停泊/续程/完成/归档、共途通信许可接入邮局、共途内的回信与引用、最小封锁、双向信友授权、只归本人可见的个人记忆，以及由两次已送达交换自动形成的双城日记。共途邀请、共同手帐、通知、举报与完整安全处置、角色扩展等功能尚未实现；地图仍不包含任何渲染技术。
 
 ## 当前进度
 
@@ -20,9 +20,10 @@ Somewhere 是一个 Web 优先的慢社交产品：用按距离延迟抵达的�
 | TASK-010 | DONE | 双向信友：两条单方同意、三组列表、封锁优先、邮局收件人接入 |
 | TASK-011 | DONE | 个人记忆：`personal_memories`、仅本人 CRUD、非本人/`ADMIN` 统一 404 |
 | TASK-012 | DONE | 共途回信与 `replyToPostcardId`、`canReply`、重复回信 409、并发唯一性、契约、E2E 与 Smoke |
-| TASK-013 | 未开始 | 双城日记（MEMORY-02/03）；“册 / 页 / 左右”形态与生成条件已确认，等待批准 |
+| TASK-013 | DONE | `diary_pages` 幂等生成、列表无正文、只读双页、第三人 404、受限隐藏、Worker 接入 |
+| 下一任务 | 未开始 | 建议共途邀请/创建（PAS-01）或其他 P0 缺口，等待批准 |
 
-详细验收记录见 `tasks/current.md` 与 `tasks/archive/`；最近一次全量证据见 `artifacts/verification/TASK-012/`。
+详细验收记录见 `tasks/current.md` 与 `tasks/archive/`；最近一次全量证据见 `artifacts/verification/TASK-013/`。
 
 ## 技术栈
 
@@ -98,12 +99,12 @@ pnpm --filter @somewhere/api worker
 pnpm lint              # ESLint（TS + Vue）
 pnpm typecheck         # 前端、后端、api-client 严格类型检查
 pnpm build             # Nest 编译 + Vite 构建
-pnpm test:unit         # 认证策略、距离/延迟、明信片与回信资格、故事状态、共途、封锁、信友、记忆、Web 路由/客户端
-pnpm test:integration  # NestJS HTTP + 真实 PostgreSQL（含故事审核、邮局/Worker、共途与回信、封锁、信友、记忆）
+pnpm test:unit         # 认证策略、距离/延迟、明信片与回信资格、故事状态、共途、封锁、信友、个人记忆、双城日记配对、Web 路由/客户端
+pnpm test:integration  # NestJS HTTP + 真实 PostgreSQL（含故事审核、邮局/Worker、共途与回信、封锁、信友、记忆与双城日记）
 pnpm test:contract     # OpenAPI 与 packages/api-client 生成产物一致性
 pnpm test:architecture # 层次依赖、跨模块导入、浏览器存储禁令
-pnpm test:e2e          # Playwright：认证、四导航、设置、故事/地图、邮局、共途与回信、封锁、信友、记忆
-pnpm test:smoke        # 构建产物 + 真实 HTTP 冒烟（含故事/邮局/共途/回信/封锁/信友/记忆闭环）
+pnpm test:e2e          # Playwright：认证、四导航、设置、故事/地图、邮局、共途与回信、封锁、信友、纪念册
+pnpm test:smoke        # 构建产物 + 真实 HTTP 冒烟（含故事/邮局/共途/回信/封锁/信友/纪念册闭环）
 pnpm verify            # 串行执行以上全部；任一失败返回非 0
 ```
 
@@ -160,6 +161,8 @@ pnpm verify            # 串行执行以上全部；任一失败返回非 0
 | DELETE | `/api/v1/penpals/:counterpartId/consent` | 登录；撤销或拒绝；幂等 |
 | GET/POST | `/api/v1/memories/personal` | 登录；本人个人记忆列表/创建；只含本人 |
 | PATCH/DELETE | `/api/v1/memories/personal/:id` | 登录；本人编辑/删除；非本人或不存在统一 404 |
+| GET | `/api/v1/memories/diaries` | 登录；我有权阅读的双城日记列表；只返回元数据，不含正文 |
+| GET | `/api/v1/memories/diaries/:id` | 登录；只读双页；仅该页两封的收发者，第三人统一 404 |
 | GET | `/api/v1/moderation/queue` | 仅 `ADMIN`；待审核故事队列 |
 | POST | `/api/v1/moderation/stories/:id/decision` | 仅 `ADMIN`；通过/驳回/下架，不能自审 |
 | GET | `/api/v1/health` | API + 数据库连通性 |
@@ -212,6 +215,6 @@ infra/postgres/      本地数据库初始化脚本
 docs/ specs/ tasks/  架构、测试规范、功能规范与当前任务
 ```
 
-## 当前阶段（TASK-013）明确不做
+## 当前阶段（TASK-013 已完成）明确不做
 
-不实现共途邀请 / 创建入口与邀请专项测试；不实现共同手帐、日记公开 / 分享 / 导出与来源引用；不实现通知、举报、通用安全处置、`RESTRICTED` 写入口、角色扩展与后台用户管理；不实现善意接力（P1）；不实现任何地图渲染技术（地图引擎、瓦片、地理图层、二维/三维方案）与显示城市/上地图开关、匿名作者、30 天轮换；不实现完整 Profile（bio、语言、主题标签、可见性、公开资料页）、邮箱验证、找回密码与账号删除。共途没有 HTTP 创建入口，测试与本地演示使用非生产脚本 `apps/api/scripts/seed-passage.mjs`。TASK-012 的回信已实现；TASK-013 双城日记的形态与生成条件已确认，尚未编码。`RESTRICTED` 只有枚举与读取拒绝，`CLOSED` 只有只读判定，均没有通用处置路径。故事审核台只处理城市故事，并禁止管理员审核自己的故事。世界记忆地图只复用已审核公开故事，不新增“地图故事”实体。无 `passageId` 的邮局草稿使用「演示白名单 ∪ 有效信友」，不开放用户搜索。
+不实现共途邀请 / 创建入口与邀请专项测试；不实现共同手帐、日记公开 / 分享 / 导出与来源引用；不实现通知、举报、通用安全处置、`RESTRICTED` 写入口、角色扩展与后台用户管理；不实现善意接力（P1）；不实现任何地图渲染技术（地图引擎、瓦片、地理图层、二维/三维方案）与显示城市/上地图开关、匿名作者、30 天轮换；不实现完整 Profile（bio、语言、主题标签、可见性、公开资料页）、邮箱验证、找回密码与账号删除。共途没有 HTTP 创建入口，测试与本地演示使用非生产脚本 `apps/api/scripts/seed-passage.mjs`。TASK-012 的回信与 TASK-013 的双城日记已实现并验收。`RESTRICTED` 只有枚举与读取拒绝，`CLOSED` 只有只读判定，均没有通用处置路径。故事审核台只处理城市故事，并禁止管理员审核自己的故事。世界记忆地图只复用已审核公开故事，不新增“地图故事”实体。无 `passageId` 的邮局草稿使用「演示白名单 ∪ 有效信友」，不开放用户搜索。

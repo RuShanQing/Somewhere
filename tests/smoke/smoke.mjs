@@ -670,6 +670,36 @@ async function runHttpChecks() {
   assert(replyDetailForSenderBody.body === '冒烟回信正文。', '回信送达后原寄件人读不到正文');
   pass('回信：共途引用、收件人解析、送达、重复回信 409 与响应无 email');
 
+  // ---- 双城日记：自动生成、列表无正文、详情双页 ----
+  const diaryListResponse = await fetch(`${apiBase}/api/v1/memories/diaries`, {
+    headers: { cookie: loginSession.pair },
+  });
+  const diaryListText = await diaryListResponse.text();
+  assert(diaryListResponse.status === 200, `双城日记列表返回 ${diaryListResponse.status}`);
+  assert(!diaryListText.includes('"body"'), '双城日记列表泄露正文');
+  assert(!/"email"\s*:/.test(diaryListText), '双城日记列表泄露 email');
+  const diaryItems = JSON.parse(diaryListText).items;
+  assert(diaryItems.length === 1, `双城日记应恰好一页，实际 ${diaryItems.length}`);
+  const diaryId = diaryItems[0].id;
+
+  const diaryDetailResponse = await fetch(`${apiBase}/api/v1/memories/diaries/${diaryId}`, {
+    headers: { cookie: loginSession.pair },
+  });
+  const diaryDetail = await diaryDetailResponse.json();
+  assert(diaryDetailResponse.status === 200, `双城日记详情返回 ${diaryDetailResponse.status}`);
+  assert(diaryDetail.left.body === '冒烟回信的原信。', '双城日记左页正文不正确');
+  assert(diaryDetail.right.body === '冒烟回信正文。', '双城日记右页正文不正确');
+
+  const diaryForReplySender = await fetch(
+    `${apiBase}/api/v1/memories/diaries/${diaryId}`,
+    { headers: { cookie: recipientSession.pair } },
+  );
+  assert(
+    diaryForReplySender.status === 200,
+    `回信方读取双城日记返回 ${diaryForReplySender.status}`,
+  );
+  pass('双城日记：自动生成、列表无正文、详情双页与双方可读');
+
   const pauseResponse = await fetch(`${apiBase}/api/v1/passages/${seededPassage.id}/pause`, {
     method: 'POST',
     headers: { ...origin, cookie: loginSession.pair },

@@ -98,6 +98,23 @@ test('REPLY AC-06 收件人回信、送达对方并在移动端可读', async ({
     innerWidth: window.innerWidth,
   }));
   expect(layout.scrollWidth).toBeLessThanOrEqual(layout.innerWidth + 1);
-
   await capture(page, 'reply-delivered');
+
+  await page.goto('/memories');
+  await expect(page).toHaveURL(/\/memories$/);
+  await expect(page.getByText('回信测试共途')).toBeVisible();
+  await expect(page.getByText('这是慢慢抵达的回信。')).toHaveCount(0);
+
+  await page.getByRole('link', { name: '打开这一页' }).first().click();
+  await expect(page).toHaveURL(/\/memories\/diaries\/[0-9a-f-]+$/);
+  await expect(page.getByText('这是回信流程里的原信。')).toBeVisible();
+  await expect(page.getByText('这是慢慢抵达的回信。')).toBeVisible();
+  await expect(page.getByRole('link', { name: /分享|导出/ })).toHaveCount(0);
+
+  const diaryLayout = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    innerWidth: window.innerWidth,
+  }));
+  expect(diaryLayout.scrollWidth).toBeLessThanOrEqual(diaryLayout.innerWidth + 1);
+  await capture(page, 'diary-page');
 });

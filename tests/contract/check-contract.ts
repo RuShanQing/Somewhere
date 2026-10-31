@@ -106,6 +106,8 @@ try {
     '/api/v1/penpals/{counterpartId}/consent',
     '/api/v1/memories/personal',
     '/api/v1/memories/personal/{id}',
+    '/api/v1/memories/diaries',
+    '/api/v1/memories/diaries/{id}',
   ];
   for (const path of expectedPaths) {
     if (!document.paths[path]) {
@@ -461,6 +463,75 @@ try {
   );
   if (memoryUpdateSchemaName !== 'PersonalMemoryDto') {
     fail(`个人记忆更新响应必须使用 PersonalMemoryDto，实际为 ${memoryUpdateSchemaName}`);
+  }
+
+  const diarySummarySchema = JSON.stringify(
+    document.components?.schemas?.DiarySummaryDto ?? {},
+  );
+  const diaryDetailSchema = JSON.stringify(
+    document.components?.schemas?.DiaryDetailDto ?? {},
+  );
+  const diaryPostcardSchema = JSON.stringify(
+    document.components?.schemas?.DiaryPostcardDto ?? {},
+  );
+  const diaryListSchema = JSON.stringify(document.components?.schemas?.DiaryListDto ?? {});
+  const diarySchema = `${diarySummarySchema}${diaryDetailSchema}${diaryPostcardSchema}${diaryListSchema}`;
+
+  for (const field of [
+    '"id"',
+    '"passageId"',
+    '"topic"',
+    '"leftCity"',
+    '"rightCity"',
+    '"leftSentAt"',
+    '"rightSentAt"',
+    '"createdAt"',
+  ]) {
+    if (!diarySummarySchema.includes(field)) {
+      fail(`DiarySummaryDto 缺少 ${field}`);
+    }
+  }
+  if (diarySummarySchema.includes('"body"') || diaryListSchema.includes('"body"')) {
+    fail('双城日记列表不能包含正文');
+  }
+  for (const field of [
+    '"id"',
+    '"senderNickname"',
+    '"body"',
+    '"sentAt"',
+    '"deliveredAt"',
+    '"city"',
+  ]) {
+    if (!diaryPostcardSchema.includes(field)) {
+      fail(`DiaryPostcardDto 缺少 ${field}`);
+    }
+  }
+  if (!diaryDetailSchema.includes('"left"') || !diaryDetailSchema.includes('"right"')) {
+    fail('DiaryDetailDto 必须包含 left 与 right');
+  }
+  if (
+    /"email"\s*:|ownerId|userId|centroidLat|centroidLon|password|session/i.test(diarySchema)
+  ) {
+    fail('双城日记契约不能包含 email、用户 ID、坐标、密码或会话字段');
+  }
+
+  const diaryListSchemaName = responseSchemaName(
+    document,
+    '/api/v1/memories/diaries',
+    'get',
+    '200',
+  );
+  if (diaryListSchemaName !== 'DiaryListDto') {
+    fail(`双城日记列表响应必须使用 DiaryListDto，实际为 ${diaryListSchemaName}`);
+  }
+  const diaryDetailSchemaName = responseSchemaName(
+    document,
+    '/api/v1/memories/diaries/{id}',
+    'get',
+    '200',
+  );
+  if (diaryDetailSchemaName !== 'DiaryDetailDto') {
+    fail(`双城日记详情响应必须使用 DiaryDetailDto，实际为 ${diaryDetailSchemaName}`);
   }
 
   const decisionSchema = JSON.stringify(

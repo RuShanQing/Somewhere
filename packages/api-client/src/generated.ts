@@ -740,6 +740,46 @@ export interface paths {
         patch: operations["MemoriesController_update"];
         trace?: never;
     };
+    "/api/v1/memories/diaries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 我有权阅读的双城日记
+         * @description 只返回页面元数据，不返回正文；只包含本人参与的共途，受限或已失效页面会被隐藏。
+         */
+        get: operations["DiariesController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/memories/diaries/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 双城日记单页详情
+         * @description 仅该页两封明信片的收发者可读；非参与者、非法 ID、任一封受限统一返回不可访问。
+         */
+        get: operations["DiariesController_detail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health": {
         parameters: {
             query?: never;
@@ -1454,6 +1494,75 @@ export interface components {
              * @example 重新整理后的片段。
              */
             body?: string;
+        };
+        DiaryCityDto: {
+            /** @description 城市 ID */
+            id: string;
+            /**
+             * @description 城市名称
+             * @example 东京
+             */
+            name: string;
+            /**
+             * @description 国家代码
+             * @example JP
+             */
+            countryCode: string;
+        };
+        DiarySummaryDto: {
+            /** @description 日记页面 ID */
+            id: string;
+            /** @description 所属共途 ID */
+            passageId: string;
+            /**
+             * @description 共途主题
+             * @example 雨夜的东京
+             */
+            topic: string;
+            /** @description 原信寄出城市 */
+            leftCity: components["schemas"]["DiaryCityDto"];
+            /** @description 回信寄出城市 */
+            rightCity: components["schemas"]["DiaryCityDto"];
+            /** @description 原信寄出时间（UTC ISO 8601） */
+            leftSentAt: string;
+            /** @description 回信寄出时间（UTC ISO 8601） */
+            rightSentAt: string;
+            /** @description 页面形成时间（UTC ISO 8601） */
+            createdAt: string;
+        };
+        DiaryListDto: {
+            items: components["schemas"]["DiarySummaryDto"][];
+        };
+        DiaryPostcardDto: {
+            /** @description 明信片 ID */
+            id: string;
+            /** @description 寄件者公开昵称 */
+            senderNickname: string;
+            /** @description 正文；只返回给该页的两位参与者 */
+            body: string;
+            /** @description 寄出时间（UTC ISO 8601） */
+            sentAt: string;
+            /** @description 送达时间（UTC ISO 8601）；本页形成时必然已送达 */
+            deliveredAt?: string | null;
+            /** @description 寄出城市快照 */
+            city: components["schemas"]["DiaryCityDto"];
+        };
+        DiaryDetailDto: {
+            /** @description 日记页面 ID */
+            id: string;
+            /** @description 所属共途 ID */
+            passageId: string;
+            /**
+             * @description 共途主题
+             * @example 雨夜的东京
+             */
+            topic: string;
+            /** @description 页面形成时间（UTC ISO 8601） */
+            createdAt: string;
+            /** @description 左页：被回信的原信 */
+            left: components["schemas"]["DiaryPostcardDto"];
+            /** @description 右页：回信 */
+            right: components["schemas"]["DiaryPostcardDto"];
         };
         HealthResponseDto: {
             /**
@@ -3234,6 +3343,83 @@ export interface operations {
                 };
             };
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    DiariesController_list: {
+        parameters: {
+            query?: {
+                /** @description 返回数量，1–50，默认 20 */
+                limit?: number;
+                /** @description 偏移量，默认 0 */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiaryListDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    DiariesController_detail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiaryDetailDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -52,6 +52,17 @@ export class PassageRepository {
     });
   }
 
+  /** TASK-013：只返回用户参与的共途 ID 与主题，供纪念册聚合使用。 */
+  async listContextsForUser(
+    userId: string,
+  ): Promise<Array<{ id: string; topic: string }>> {
+    return this.prisma.passage.findMany({
+      where: { participants: { some: { userId } } },
+      select: { id: true, topic: true },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+    });
+  }
+
   /** 只回答两人是否至少共同完成过一段共途；不暴露主题、状态或事件。 */
   async hasCompletedBetween(firstUserId: string, secondUserId: string): Promise<boolean> {
     if (firstUserId === secondUserId) {

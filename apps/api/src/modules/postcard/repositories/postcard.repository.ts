@@ -57,6 +57,22 @@ export class PostcardRepository {
     });
   }
 
+  /** TASK-013：已送达的回信，按送达时间稳定排序，供日记生成扫描。 */
+  async listDeliveredReplies(limit: number): Promise<Postcard[]> {
+    return this.prisma.postcard.findMany({
+      where: { replyToPostcardId: { not: null }, status: 'DELIVERED' },
+      orderBy: [{ deliveredAt: 'asc' }, { id: 'asc' }],
+      take: limit,
+    });
+  }
+
+  async findByIds(ids: string[]): Promise<Postcard[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    return this.prisma.postcard.findMany({ where: { id: { in: ids } } });
+  }
+
   async listIncoming(
     receiverId: string,
     limit: number,
